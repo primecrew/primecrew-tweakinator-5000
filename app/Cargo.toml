@@ -1,0 +1,31 @@
+[package]
+name = "win10_tweaks"
+version = "1.1.0"
+edition = "2021"
+description = "PrimeCrew Tweakinator 5000 - portable offline tweak utility (updates, Win11 block, Copilot, Spotlight, God Mode, WU cache cleanup, guided OneDrive removal)"
+license = "MIT"
+build = "build.rs"
+
+[[bin]]
+name = "win10_tweaks"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+dirs = "6"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Registry", "Win32_System_Threading", "Win32_System_RemoteDesktop", "Win32_System_WindowsProgramming", "Win32_System_Com"] }
+
+[build-dependencies]
+winres = "0.1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

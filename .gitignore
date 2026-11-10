@@ -1,0 +1,23 @@
+# Build output (source only in this repo; binaries go in GitHub Releases)
+**/target/
+*.exe
+*.pdb
+*.zip
+
+# Logs and local state
+*.log
+/logs/
+*.settings.json
+
+# Secrets / local environment (never commit)
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+credentials*.json
+.venv/
+venv/
+__pycache__/
+node_modules/

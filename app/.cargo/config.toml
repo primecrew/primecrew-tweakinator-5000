@@ -1,0 +1,11 @@
+# Cross-compile from Linux with llvm-mingw (https://github.com/mstorsjo/llvm-mingw):
+#   PATH=<llvm-mingw>/bin:$PATH cargo build --release --target x86_64-pc-windows-gnullvm
+# On Windows just use build.cmd (MSVC toolchain); these sections are ignored there.
+[target.x86_64-pc-windows-gnullvm]
+linker = "x86_64-w64-mingw32-clang"
+# Static libunwind so the exe is a single portable file (no libunwind.dll).
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=-static"]
+
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=-static"]
