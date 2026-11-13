@@ -21,3 +21,6 @@ credentials*.json
 venv/
 __pycache__/
 node_modules/
+
+# Local release output
+/dist/

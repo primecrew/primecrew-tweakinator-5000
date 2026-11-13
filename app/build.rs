@@ -24,10 +24,12 @@ fn main() {
     res.set("ProductName", "PrimeCrew Tweakinator 5000");
     res.set("FileDescription", "PrimeCrew Tweakinator 5000");
     res.set("OriginalFilename", "PrimeCrewTweakinator5000.exe");
-    res.set("FileVersion", "1.1.0.0");
-    res.set("ProductVersion", "1.1.0.0");
-    res.set("CompanyName", "local");
-    res.set("LegalCopyright", "MIT");
+    let ver = std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.0.0".into());
+    let ver4 = format!("{ver}.0");
+    res.set("FileVersion", &ver4);
+    res.set("ProductVersion", &ver4);
+    res.set("CompanyName", "PrimeCrew Software");
+    res.set("LegalCopyright", "PrimeCrew Software");
     res.compile().expect("winres: failed to compile Windows resources (manifest + icon)");
     // GNU/LLVM linkers drop unreferenced archive members, which silently loses the manifest.
     // Link the compiled resource object directly so the requireAdministrator manifest is always embedded.

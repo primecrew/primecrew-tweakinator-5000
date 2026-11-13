@@ -4,7 +4,7 @@ use crate::catalog::*;
 use crate::sys::{self, Cur};
 use serde_json::{json, Map, Value};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -486,16 +486,55 @@ pub fn temp_expired(t: &TempAllow) -> bool {
     t.expires.is_some_and(|e| chrono::Local::now().naive_local() >= e)
 }
 
-fn restore_task_exe() -> PathBuf {
-    PathBuf::from(std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into())).join("Win10Tweaks").join("win10_tweaks.exe")
+fn norm_win_path(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    let s = s.strip_prefix(r"\\?\").unwrap_or(&s);
+    s.replace('/', "\\").to_ascii_lowercase()
 }
 
-/// One-shot SYSTEM task that runs "<Program Files>\Win10Tweaks\win10_tweaks.exe --restore-wu-kill" at `at`.
-/// The exe is copied to Program Files (admin-only write) so a SYSTEM task never runs a user-writable file.
+fn paths_equal(a: &Path, b: &Path) -> bool {
+    norm_win_path(a) == norm_win_path(b)
+}
+
+/// Official install location (`C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\...`).
+fn installed_exe() -> PathBuf {
+    PathBuf::from(std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into()))
+        .join("PrimeCrew Software")
+        .join("PrimeCrew Tweakinator 5000")
+        .join("PrimeCrewTweakinator5000.exe")
+}
+
+/// Staging path used by earlier builds, and by a portable run of this build.
+/// Keep this so a timer created by an older exe still fires.
+fn legacy_restore_task_exe() -> PathBuf {
+    PathBuf::from(std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into()))
+        .join("Win10Tweaks")
+        .join("win10_tweaks.exe")
+}
+
+fn running_from_install() -> bool {
+    std::env::current_exe().ok().is_some_and(|p| paths_equal(&p, &installed_exe()))
+}
+
+/// Exe the SYSTEM restore task should run.
+/// Installed copy: point at the installed exe (Program Files is admin-only write).
+/// Portable / other: copy to the legacy staging path so older timers and this flow stay compatible.
+fn restore_task_exe() -> PathBuf {
+    if running_from_install() {
+        installed_exe()
+    } else {
+        legacy_restore_task_exe()
+    }
+}
+
+/// One-shot SYSTEM task that runs the restore exe with --restore-wu-kill at `at`.
+/// When not already running from the installed (or staging) path, the exe is copied to the
+/// legacy Program Files staging folder (admin-only write) so a SYSTEM task never runs a user-writable file.
 fn schedule_restore(log: &mut Log, at: chrono::NaiveDateTime) -> bool {
     let dst = restore_task_exe();
     let me = std::env::current_exe().ok();
-    if me.as_deref() != Some(dst.as_path()) {
+    let already_there = me.as_deref().is_some_and(|p| paths_equal(p, &dst));
+    if !already_there {
         let _ = std::fs::create_dir_all(dst.parent().unwrap());
         if let Some(src) = &me {
             if let Err(e) = std::fs::copy(src, &dst) {
@@ -531,11 +570,13 @@ fn delete_restore_task(log: &mut Log) {
     if out.trim().ends_with("removed") {
         log.w(Lvl::Set, format!("Task {RESTORE_TASK_PATH}{RESTORE_TASK_NAME} : registered -> removed"));
     }
-    // The Program Files copy is removed when it is not the running exe (a running exe can't delete itself).
-    let dst = restore_task_exe();
-    if dst.exists() && std::env::current_exe().ok().as_deref() != Some(dst.as_path()) && std::fs::remove_file(&dst).is_ok() {
-        log.w(Lvl::Set, format!("{} : present -> deleted", dst.display()));
-        let _ = std::fs::remove_dir(dst.parent().unwrap());
+    // Never delete the installed app. Only remove the legacy staging copy used when a
+    // portable (or older) build scheduled the timer. A running exe can't delete itself.
+    let staged = legacy_restore_task_exe();
+    let running_staged = std::env::current_exe().ok().is_some_and(|p| paths_equal(&p, &staged));
+    if staged.exists() && !running_staged && std::fs::remove_file(&staged).is_ok() {
+        log.w(Lvl::Set, format!("{} : present -> deleted", staged.display()));
+        let _ = std::fs::remove_dir(staged.parent().unwrap());
     }
 }
 

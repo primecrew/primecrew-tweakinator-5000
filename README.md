@@ -1,14 +1,20 @@
 # PrimeCrew Tweakinator 5000
 
-Portable Windows 10 tweak toolkit. A single unsigned exe (no install) plus a PowerShell fallback kit for the same settings. Shared with trusted friends, so every change is conservative: nothing is applied silently, Apply needs an explicit confirm, and **Verify** and **Revert** are first-class actions.
+Portable Windows 10 tweak toolkit from PrimeCrew Software. A full x64 installer and a portable unsigned exe, plus a PowerShell fallback kit for the same settings. Shared with trusted friends, so every change is conservative: nothing is applied silently, Apply needs an explicit confirm, and **Verify** and **Revert** are first-class actions.
 
-**Version:** 1.1.0 (shown in the window title, the header, Options › About, and the exe version info). The portable package is `PrimeCrewTweakinator5000-v1.1.0.zip`.
+**Version:** 1.2.0 (shown in the window title, the header, Options › About, and the exe version info). Every release ships both `PrimeCrewTweakinator5000-v1.2.0-x64-Setup.exe` and `PrimeCrewTweakinator5000-v1.2.0.zip`.
 
 **Requirements:** Windows 10 64-bit (aimed at Pro 22H2). The GUI needs a GPU/driver with OpenGL 2+ (normal on real hardware; may fail in a bare VM or some RDP sessions). No extra runtime. The app contains no network code and sends no telemetry.
 
-**Install:** unzip the portable package and run `PrimeCrewTweakinator5000.exe` from any folder (for example `C:\Apps\PrimeCrewTweakinator5000\`). Double-click shows a UAC prompt (`requireAdministrator`). If the manifest is stripped, it falls back to a `runas` relaunch. SmartScreen may say "unknown publisher" (More info → Run anyway).
+**Installer (recommended):** run `PrimeCrewTweakinator5000-v1.2.0-x64-Setup.exe`. It is 64-bit only and requires administrator rights. The app is installed to `C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\`, a shortcut is added under the **PrimeCrew Software** Start menu folder (the same kind of grouping Adobe apps use under Adobe), and an Add/Remove Programs entry is registered with Publisher **PrimeCrew Software**, DisplayVersion 1.2.0, the app icon, and a working uninstaller. An upgrade removes previous shortcuts first so they do not duplicate.
 
-Logs and recorded originals live under `C:\ProgramData\Win10Tweaks\` (logs in `Logs\`, state in `state.json`, UI prefs in `ui.json`). Version history is in [CHANGELOG.md](CHANGELOG.md).
+**Portable:** unzip `PrimeCrewTweakinator5000-v1.2.0.zip` and run `PrimeCrewTweakinator5000.exe` from any folder (for example `C:\Apps\PrimeCrewTweakinator5000\`).
+
+Double-click shows a UAC prompt (`requireAdministrator`). If the manifest is stripped, it falls back to a `runas` relaunch. SmartScreen may say "unknown publisher" (More info → Run anyway).
+
+**Uninstall:** use Add/Remove Programs or `uninstall.exe` in the install folder. Uninstalling removes the app, its Start menu shortcut, and the Add/Remove Programs entry. It does **not** revert any tweaks you applied, and it does **not** delete logs, recorded originals, or backups under `C:\ProgramData\Win10Tweaks`. Revert stays an in-app action: if you want your previous Windows settings back, run the app and click **Revert** before uninstalling. The uninstaller also shows this note. The **PrimeCrew Software** Start menu folder is removed only if it is empty. The parent `C:\Program Files\PrimeCrew Software` folder is left in place if other PrimeCrew Software apps are installed there.
+
+**Compatibility:** state, logs and backups stay under `C:\ProgramData\Win10Tweaks\` (logs in `Logs\`, state in `state.json`, UI prefs in `ui.json`, temporary-allow state in `tempallow.json`). Scheduled task and firewall rule names still use the `Win10Tweaks-*` prefix, so this release continues to manage tweaks applied by earlier builds. Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## What it is
 
@@ -34,7 +40,7 @@ The OneDrive removal wizard is a separate, guided flow. It is never part of Appl
 
 Side effects: no cumulative or consumer-ESU patches, no Store installs or updates, no Features on Demand / .NET 3.5 installs, Defender definitions not via Windows Update (use `Update-MpSignature -UpdateSource MMPC`), and the Settings ▸ Windows Update page may be blank.
 
-**Temporarily allow updates** lifts only what the Microsoft Store needs: the no-connect and dummy-server policies, the `Win10Tweaks-NoWU-*` firewall rules, and `wuauserv` / `UsoSvc`. `NoAutoUpdate` and the WaaSMedic lock stay, so Windows does not auto-install OS updates in the window. Durations: until you click **Restore update kill**, or 30 / 60 / 120 minutes. State is in `C:\ProgramData\Win10Tweaks\tempallow.json`. A timed allow also registers a one-shot SYSTEM task `\Win10Tweaks\Win10Tweaks-RestoreWUKill` that runs a copy of the exe from `C:\Program Files\Win10Tweaks\win10_tweaks.exe --restore-wu-kill` (so SYSTEM never runs a user-writable file). **Restore update kill** re-applies Updates exactly like Apply.
+**Temporarily allow updates** lifts only what the Microsoft Store needs: the no-connect and dummy-server policies, the `Win10Tweaks-NoWU-*` firewall rules, and `wuauserv` / `UsoSvc`. `NoAutoUpdate` and the WaaSMedic lock stay, so Windows does not auto-install OS updates in the window. Durations: until you click **Restore update kill**, or 30 / 60 / 120 minutes. State is in `C:\ProgramData\Win10Tweaks\tempallow.json`. A timed allow also registers a one-shot SYSTEM task `\Win10Tweaks\Win10Tweaks-RestoreWUKill`. When the app is running from the installed location, that task points at the installed exe. When it is running as a portable copy, the exe is staged at `C:\Program Files\Win10Tweaks\win10_tweaks.exe` (the same path earlier builds used) so SYSTEM never runs a user-writable file, and a timer created by an older build still fires. **Restore update kill** re-applies Updates exactly like Apply, and clears the task and any staged copy (it never deletes the installed exe).
 
 WinGet packages from the `winget` source (for example PowerToys) usually update without lifting the kill. Microsoft Store / `msstore` apps (for example the ChatGPT app) need Temporary allow.
 
@@ -161,7 +167,13 @@ Revert order for Updates: cancel any temporary allow / restore task → delete e
 
 ## Build
 
-This repository holds **source only**. Built exes are attached to GitHub Releases, not committed.
+This repository holds **source only**. Built exes, the portable zip and the installer are attached to GitHub Releases, not committed. Every release ships both the installer and the portable zip.
+
+**Linux (this project's usual path):** `scripts/build-release.sh` cross-compiles with llvm-mingw (https://github.com/mstorsjo/llvm-mingw), then builds the portable zip and the NSIS installer (`makensis`). Needs the `x86_64-pc-windows-gnullvm` Rust target and NSIS 3.
+
+```bash
+PATH="<llvm-mingw>/bin:$PATH" ./scripts/build-release.sh
+```
 
 **Windows:** install Rust (MSVC toolchain, https://rustup.rs). In `app\`:
 
@@ -169,24 +181,27 @@ This repository holds **source only**. Built exes are attached to GitHub Release
 build.cmd
 ```
 
-Output: `app\target\release\win10_tweaks.exe`. Rename it to `PrimeCrewTweakinator5000.exe` if you are packing a portable zip.
+Output: `app\target\release\PrimeCrewTweakinator5000.exe`.
 
-**Linux cross-compile** (llvm-mingw, https://github.com/mstorsjo/llvm-mingw):
+**Linux cross-compile (exe only):**
 
 ```bash
 cd app
 PATH="<llvm-mingw>/bin:$PATH" cargo build --release --target x86_64-pc-windows-gnullvm
 ```
 
-Output: `app/target/x86_64-pc-windows-gnullvm/release/win10_tweaks.exe`. The portable zip layout is:
+Output: `app/target/x86_64-pc-windows-gnullvm/release/PrimeCrewTweakinator5000.exe`.
+
+Release artifacts:
 
 ```
-PrimeCrewTweakinator5000-v1.1.0.zip
+PrimeCrewTweakinator5000-v1.2.0-x64-Setup.exe
+PrimeCrewTweakinator5000-v1.2.0.zip
   PrimeCrewTweakinator5000/PrimeCrewTweakinator5000.exe
   PrimeCrewTweakinator5000/README.md
 ```
 
-Every build must carry the version in the window title / About, in the exe version info (`FileVersion` / `ProductVersion`), and in the zip filename.
+Every build must carry the version in the window title / About, in the exe version info (`FileVersion` / `ProductVersion`), in the installer filename, and in the zip filename.
 
 ## Sources (fetched November 2026)
 
