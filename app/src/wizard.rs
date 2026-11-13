@@ -2,6 +2,7 @@
 // and technical. Every change still goes through a confirm dialog; the files gate stays in both modes.
 use super::{App, Pending};
 use crate::catalog::*;
+use crate::help;
 use crate::onedrive::{self as od, fmt_bytes, fmt_n, RemoveOpts, Scan};
 use crate::ops::Lvl;
 use crate::theme;
@@ -34,7 +35,7 @@ pub enum After {
     Done,
 }
 
-fn status(ui: &mut egui::Ui, l: Lvl, text: &str, tip: Option<&str>) {
+fn status(ui: &mut egui::Ui, l: Lvl, text: &str, tip: Option<&str>, topic: &'static str, expert: bool) {
     let k = theme::t();
     let (tag, c) = match l {
         Lvl::Pass => ("OK", k.ok),
@@ -46,7 +47,7 @@ fn status(ui: &mut egui::Ui, l: Lvl, text: &str, tip: Option<&str>) {
         ui.label(RichText::new(format!("{tag:<7}")).monospace().strong().color(c));
         ui.add(egui::Label::new(RichText::new(text).color(if l == Lvl::Info { k.muted } else { ui.visuals().text_color() })).wrap());
         if let Some(t) = tip {
-            theme::info(ui, t);
+            help::mark(ui, t, topic, expert);
         }
     });
 }
@@ -168,6 +169,14 @@ impl App {
                 if !self.prefs.expert {
                     ui.label(RichText::new(format!("   Step {} of 3", cur + 1)).color(k.muted));
                 }
+                let topic = match self.od_step {
+                    Step::Check => help::ID_OD_CHECK,
+                    Step::Stop => help::ID_OD_STOP,
+                    Step::Remove | Step::Done => help::ID_OD_REMOVE,
+                    Step::Welcome => help::ID_ONEDRIVE,
+                };
+                help::mark(ui, "Open the Help topic for this step.", topic, self.prefs.expert);
+                help::link(ui, topic);
             });
             ui.add_space(4.0);
         }
@@ -176,6 +185,10 @@ impl App {
     fn od_welcome(&mut self, ui: &mut egui::Ui) {
         let k = theme::t();
         theme::card(ui, "Remove OneDrive from this PC", |ui| {
+            ui.horizontal_wrapped(|ui| {
+                help::mark(ui, "A guided, three-step removal. Your files are never deleted. Nothing changes until you confirm.", help::ID_ONEDRIVE, false);
+                help::link(ui, help::ID_ONEDRIVE);
+            });
             para(ui, "This wizard helps you stop using OneDrive and take it off this PC, one safe step at a time.");
             ui.add_space(4.0);
             steps_list(ui, &[
@@ -212,9 +225,7 @@ impl App {
             if r.clicked() {
                 self.od_start_scan(ctx);
             }
-            if !expert {
-                theme::info(ui, "Looks through your OneDrive folder and your Desktop, Documents and Pictures. It only reads; nothing is changed or downloaded.");
-            }
+            help::mark(ui, "Looks through your OneDrive folder and your Desktop, Documents and Pictures. It only reads; nothing is changed or downloaded.", help::ID_OD_CHECK, expert);
             if let Some(s) = &scan {
                 ui.label(RichText::new(format!("last checked {}", s.at)).color(k.muted));
             }
@@ -242,41 +253,41 @@ impl App {
         };
         theme::card(ui, "What we found", |ui| {
             if s.mismatch.is_some() {
-                status(ui, Lvl::Fail, "Wrong Windows account (see the red note above).", (!expert).then_some("The person signed in to Windows must also be the one running this app, or we'd check someone else's files."));
+                status(ui, Lvl::Fail, "Wrong Windows account (see the red note above).", Some("The person signed in to Windows must also be the one running this app, or we'd check someone else's files."), help::ID_OD_CHECK, expert);
             }
             if s.cloud_files == 0 && s.cloud_dirs == 0 {
-                status(ui, Lvl::Pass, &format!("All {} files in OneDrive are on this PC.", fmt_n(s.files)), (!expert).then_some("Good. Every file has a real copy on this computer."));
+                status(ui, Lvl::Pass, &format!("All {} files in OneDrive are on this PC.", fmt_n(s.files)), Some("Good. Every file has a real copy on this computer."), help::ID_OD_CHECK, expert);
             } else {
                 let t = format!("{} files ({}){} only live in the cloud.", fmt_n(s.cloud_files), fmt_bytes(s.cloud_bytes), if s.cloud_dirs > 0 { format!(" and {} folders", fmt_n(s.cloud_dirs)) } else { String::new() });
-                status(ui, Lvl::Fail, &t, (!expert).then_some("These are in your OneDrive online but not stored on this PC yet. Click 'Download all files to this PC' and wait until this says everything is on this PC."));
+                status(ui, Lvl::Fail, &t, Some("These are in your OneDrive online but not stored on this PC yet. Click 'Download all files to this PC' and wait until this says everything is on this PC."), help::ID_OD_CHECK, expert);
             }
             for kf in &s.known {
                 if kf.in_od {
                     let t = if expert { format!("{} -> {} (inside OneDrive; {} cloud-only)", kf.label, kf.path, fmt_n(kf.cloud)) } else { format!("Your {} is being backed up to OneDrive.", kf.label) };
-                    status(ui, Lvl::Fail, &t, (!expert).then_some("Turn off backup for this folder in OneDrive (steps below) and choose to keep the files on this PC. Or use 'Copy my folders back'."));
+                    status(ui, Lvl::Fail, &t, Some("Turn off backup for this folder in OneDrive (steps below) and choose to keep the files on this PC. Or use 'Copy my folders back'."), help::ID_OD_CHECK, expert);
                 } else {
                     let t = if expert { format!("{} -> {}", kf.label, kf.path) } else { format!("Your {} is on this PC.", kf.label) };
-                    status(ui, Lvl::Pass, &t, (!expert).then_some("This folder is a normal folder on this computer."));
+                    status(ui, Lvl::Pass, &t, Some("This folder is a normal folder on this computer."), help::ID_OD_CHECK, expert);
                 }
             }
             for a in &s.accounts {
-                status(ui, Lvl::Warn, &format!("Signed in to OneDrive: {} {}", a.kind, a.email), (!expert).then_some("You'll unlink this in Step 2. Unlinking keeps your files."));
+                status(ui, Lvl::Warn, &format!("Signed in to OneDrive: {} {}", a.kind, a.email), Some("You'll unlink this in Step 2. Unlinking keeps your files."), help::ID_OD_CHECK, expert);
             }
             if s.url_files > 0 {
-                status(ui, Lvl::Warn, &format!("{} web-link files found. OneNote notebooks look like this and live only online.", fmt_n(s.url_files)), (!expert).then_some("If you use OneNote, open each notebook in OneNote and use File > Export to save a copy on this PC."));
+                status(ui, Lvl::Warn, &format!("{} web-link files found. OneNote notebooks look like this and live only online.", fmt_n(s.url_files)), Some("If you use OneNote, open each notebook in OneNote and use File > Export to save a copy on this PC."), help::ID_OD_CHECK, expert);
             }
             if s.errors > 0 {
-                status(ui, Lvl::Warn, &format!("{} items could not be read.", fmt_n(s.errors)), (!expert).then_some("Usually a file in use or a folder you don't have permission for. Close other apps and check again."));
+                status(ui, Lvl::Warn, &format!("{} items could not be read.", fmt_n(s.errors)), Some("Usually a file in use or a folder you don't have permission for. Close other apps and check again."), help::ID_OD_CHECK, expert);
             }
-            status(ui, Lvl::Info, &format!("OneDrive app: {}{}", if s.installed { "installed" } else { "not installed" }, if s.running { ", running" } else { "" }), None);
+            status(ui, Lvl::Info, &format!("OneDrive app: {}{}", if s.installed { "installed" } else { "not installed" }, if s.running { ", running" } else { "" }), None, help::ID_OD_CHECK, expert);
             if expert {
                 for r in &s.roots {
-                    status(ui, Lvl::Info, &format!("root {}", r.display()), None);
+                    status(ui, Lvl::Info, &format!("root {}", r.display()), None, help::ID_OD_CHECK, expert);
                 }
                 for w in &s.install_where {
-                    status(ui, Lvl::Info, &format!("install {w}"), None);
+                    status(ui, Lvl::Info, &format!("install {w}"), None, help::ID_OD_CHECK, expert);
                 }
-                status(ui, Lvl::Info, &format!("{} files, {} total", fmt_n(s.files), fmt_bytes(s.bytes)), None);
+                status(ui, Lvl::Info, &format!("{} files, {} total", fmt_n(s.files), fmt_bytes(s.bytes)), None, help::ID_OD_CHECK, expert);
             }
         });
 
@@ -373,15 +384,13 @@ impl App {
                 if ui.add_enabled(!self.busy() && self.mismatch.is_none(), egui::Button::new("Check again")).clicked() {
                     self.od_start_scan(ctx);
                 }
-                if !expert {
-                    theme::info(ui, "Unlinking only disconnects this PC. Your files stay on this PC and online at OneDrive.com.");
-                }
+                help::mark(ui, "Unlinking only disconnects this PC. Your files stay on this PC and online at OneDrive.com.", help::ID_OD_STOP, expert);
             });
             if scan.accounts.is_empty() {
-                status(ui, Lvl::Pass, "No account is linked any more.", None);
+                status(ui, Lvl::Pass, "No account is linked any more.", None, help::ID_OD_STOP, expert);
             } else {
                 for a in &scan.accounts {
-                    status(ui, Lvl::Warn, &format!("Still linked: {} {}", a.kind, a.email), (!expert).then_some("Follow the steps above, then click Check again. You can also go on; removing OneDrive works either way."));
+                    status(ui, Lvl::Warn, &format!("Still linked: {} {}", a.kind, a.email), Some("Follow the steps above, then click Check again. You can also go on; removing OneDrive works either way."), help::ID_OD_STOP, expert);
                 }
             }
         });
@@ -447,15 +456,11 @@ impl App {
             }
             ui.horizontal_wrapped(|ui| {
                 ui.checkbox(&mut self.od_nav, "Hide OneDrive from the File Explorer side bar");
-                if !expert {
-                    theme::info(ui, "Removes the OneDrive entry on the left side of File Explorer. Undo puts it back.");
-                }
+                help::mark(ui, "Removes the OneDrive entry on the left side of File Explorer. Undo puts it back.", help::ID_OD_REMOVE, expert);
             });
             ui.horizontal_wrapped(|ui| {
                 ui.checkbox(&mut self.od_new_users, "Don't install OneDrive for new user accounts on this PC");
-                if !expert {
-                    theme::info(ui, "Windows normally installs OneDrive for every new account. This stops that. Undo puts it back.");
-                }
+                help::mark(ui, "Windows normally installs OneDrive for every new account. This stops that. Undo puts it back.", help::ID_OD_REMOVE, expert);
             });
         });
         theme::card(ui, "What will happen", |ui| {
@@ -516,6 +521,8 @@ impl App {
         let has_state = od::removal_recorded() || crate::ops::load_state().values().any(|e| e["Category"].as_str() == Some("OneDrive"));
         ui.horizontal_wrapped(|ui| {
             let k = theme::t();
+            help::mark(ui, "Read about this wizard in Help.", help::ID_ONEDRIVE, expert);
+            help::link(ui, help::ID_ONEDRIVE);
             if ui.add_enabled(!self.busy(), egui::Button::new(RichText::new("Verify (read-only)").color(k.info))).on_hover_text("Shows the OneDrive state in the log. Changes nothing.").clicked() {
                 self.start(ctx, "OneDriveVerify", |log| od::verify_status(log, true));
             }

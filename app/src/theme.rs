@@ -401,6 +401,7 @@ pub fn pill(ui: &mut egui::Ui, text: &str, fill: Color32, tooltip: &str) -> egui
 }
 
 /// Small "(i)" marker with a plain-language explanation on hover / focus.
+#[allow(dead_code)]
 pub fn info(ui: &mut egui::Ui, text: &str) -> egui::Response {
     let k = t();
     ui.add(egui::Label::new(egui::RichText::new("(i)").strong().color(k.info)).sense(egui::Sense::hover())).on_hover_text(text)

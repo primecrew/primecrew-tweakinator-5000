@@ -1,54 +1,81 @@
 //! PrimeCrew Tweakinator 5000 (Windows 10 tweaks) - portable, offline (no network code at all), admin-only GUI.
+//! The UI also builds on Linux (with stubs) so screenshots can be taken under Xvfb.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-#[cfg(windows)]
 mod catalog;
+mod help;
+mod psgen;
+mod theme;
+
 #[cfg(windows)]
 mod onedrive;
 #[cfg(windows)]
 mod ops;
 #[cfg(windows)]
-mod psgen;
-#[cfg(windows)]
 mod sys;
-#[cfg(windows)]
-mod theme;
 
 #[cfg(not(windows))]
-fn main() {
-    eprintln!("PrimeCrew Tweakinator 5000 runs on Windows only.");
+mod linux_stub;
+#[cfg(not(windows))]
+mod onedrive {
+    pub use crate::linux_stub::onedrive::*;
+}
+#[cfg(not(windows))]
+mod ops {
+    pub use crate::linux_stub::ops::*;
+}
+#[cfg(not(windows))]
+mod sys {
+    pub use crate::linux_stub::sys::*;
 }
 
-#[cfg(windows)]
-fn main() -> eframe::Result<()> {
-    // Headless one-shot used by the SYSTEM task Win10Tweaks-RestoreWUKill: re-apply the Updates kill, no window.
-    if std::env::args().any(|a| a == catalog::RESTORE_FLAG) {
-        if sys::is_admin() {
-            ops::headless_restore();
+fn screenshot_dir() -> Option<std::path::PathBuf> {
+    let mut args = std::env::args();
+    while let Some(a) = args.next() {
+        if a == "--screenshot" {
+            return args.next().map(std::path::PathBuf::from);
         }
-        return Ok(());
     }
+    None
+}
+
+fn main() -> eframe::Result<()> {
+    #[cfg(windows)]
+    {
+        // Headless one-shot used by the SYSTEM task Win10Tweaks-RestoreWUKill: re-apply the Updates kill, no window.
+        if std::env::args().any(|a| a == catalog::RESTORE_FLAG) {
+            if sys::is_admin() {
+                ops::headless_restore();
+            }
+            return Ok(());
+        }
+    }
+    let shot = screenshot_dir();
     let admin = sys::is_admin();
     // The manifest already requests admin; this is the runtime fallback (e.g. manifest stripped).
-    if !admin && std::env::args().all(|a| a != "--no-elevate") && sys::relaunch_elevated() {
-        return Ok(());
+    #[cfg(windows)]
+    {
+        if !admin && std::env::args().all(|a| a != "--no-elevate") && sys::relaunch_elevated() {
+            return Ok(());
+        }
     }
     let title = gui::APP_TITLE;
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title(title)
             .with_icon(std::sync::Arc::new(eframe::egui::IconData { rgba: gui::ICON_RGBA.to_vec(), width: 128, height: 128 }))
-            .with_inner_size([1100.0, 760.0])
+            .with_inner_size([1100.0, 800.0])
             .with_min_inner_size([820.0, 560.0]),
         ..Default::default()
     };
-    eframe::run_native(title, options, Box::new(move |cc| Ok(Box::new(gui::App::new(cc, admin)))))
+    eframe::run_native(title, options, Box::new(move |cc| Ok(Box::new(gui::App::new(cc, admin, shot)))))
 }
 
-#[cfg(windows)]
 mod gui {
+
     use crate::catalog::*;
     use crate::ops::{self, Log, Lvl, Msg, Opts};
+    use crate::help;
     use crate::theme::{self, Look, Prefs};
     use crate::{psgen, sys};
     use eframe::egui::{self, RichText};
@@ -81,6 +108,22 @@ mod gui {
         if m == 0 { "until I click Restore".into() } else { format!("{m} minutes") }
     }
 
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum ShotPhase {
+        Main,
+        Help,
+        Tip,
+        About,
+        Done,
+    }
+
+    struct Shot {
+        dir: std::path::PathBuf,
+        phase: ShotPhase,
+        frames: u32,
+        waiting: bool,
+    }
+
     pub struct App {
         admin: bool,
         os: String,
@@ -109,6 +152,11 @@ mod gui {
         od_nav: bool,
         od_new_users: bool,
         od_after: Option<After>,
+        help_open: bool,
+        help_topic: &'static str,
+        about_open: bool,
+        shot_tip: bool,
+        shot: Option<Shot>,
     }
 
     const SHORT_NOTE: &str = "Blocking Windows Update also blocks security / ESU patches";
@@ -125,7 +173,7 @@ mod gui {
     }
 
     impl App {
-        pub fn new(cc: &eframe::CreationContext<'_>, admin: bool) -> Self {
+        pub fn new(cc: &eframe::CreationContext<'_>, admin: bool, shot_dir: Option<std::path::PathBuf>) -> Self {
             let prefs_path = ops::root_dir().join("ui.json");
             let prefs = Prefs::load(&prefs_path);
             theme::install_fonts(&cc.egui_ctx);
@@ -158,6 +206,11 @@ mod gui {
                 od_nav: true,
                 od_new_users: true,
                 od_after: None,
+                help_open: false,
+                help_topic: help::ID_START,
+                about_open: false,
+                shot_tip: false,
+                shot: shot_dir.map(|dir| Shot { dir, phase: ShotPhase::Main, frames: 0, waiting: false }),
             };
             a.sel[0] = false; // cleanup is opt-in
             a.push(Lvl::Info, format!("OS: {}", a.os));
@@ -198,6 +251,10 @@ mod gui {
         fn shortcuts(&mut self, ctx: &egui::Context) {
             let mut p = self.prefs;
             ctx.input(|i| {
+                if i.key_pressed(egui::Key::F1) {
+                    // handled below; flag via help::open so we don't need a second borrow
+                    help::open(help::ID_START);
+                }
                 if i.modifiers.command {
                     if i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals) {
                         p.scale = theme::step(p.scale, true);
@@ -219,6 +276,170 @@ mod gui {
                 }
             }
             self.set_prefs(ctx, p);
+        }
+
+        fn open_logs(&self) {
+            let d = ops::root_dir().join("Logs");
+            let _ = std::fs::create_dir_all(&d);
+            #[cfg(windows)]
+            let _ = std::process::Command::new("explorer.exe").arg(&d).spawn();
+            #[cfg(not(windows))]
+            let _ = std::process::Command::new("xdg-open").arg(&d).spawn();
+        }
+
+        fn copy_powershell(&mut self, ctx: &egui::Context) {
+            let s = psgen::generate(&self.selected(), self.opts);
+            let n = s.lines().count();
+            ctx.copy_text(s);
+            self.push(Lvl::Info, format!("Copied generated PowerShell ({n} lines) for: {}. Paste into an elevated PowerShell.", self.selected().iter().map(|c| c.id()).collect::<Vec<_>>().join(", ")));
+        }
+
+        fn menu_bar(&mut self, ctx: &egui::Context) {
+            let k = theme::t();
+            egui::TopBottomPanel::top("menu")
+                .frame(egui::Frame::new().fill(k.bar_fill).inner_margin(egui::Margin::symmetric(8, 2)))
+                .show(ctx, |ui| {
+                    egui::menu::bar(ui, |ui| {
+                        ui.menu_button("File", |ui| {
+                            if ui.button("Copy PowerShell script").clicked() {
+                                self.copy_powershell(ctx);
+                                ui.close_menu();
+                            }
+                            if ui.button("Open logs folder").clicked() {
+                                self.open_logs();
+                                ui.close_menu();
+                            }
+                            ui.separator();
+                            if ui.button("Exit").clicked() {
+                                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                                ui.close_menu();
+                            }
+                        });
+                        ui.menu_button("View", |ui| {
+                            ui.menu_button("Theme", |ui| {
+                                let mut p = self.prefs;
+                                for l in Look::ALL {
+                                    if ui.selectable_label(p.look == l, l.label()).clicked() {
+                                        p.look = l;
+                                        self.set_prefs(ctx, p);
+                                        ui.close_menu();
+                                    }
+                                }
+                            });
+                        });
+                        ui.menu_button("Options", |ui| {
+                            let mut p = self.prefs;
+                            if ui.checkbox(&mut p.expert, "Expert mode").changed() {
+                                self.set_prefs(ctx, p);
+                            }
+                            ui.label(egui::RichText::new("Off by default. Safety checks and confirmations stay on.").small().color(k.muted));
+                        });
+                        ui.menu_button("Help", |ui| {
+                            if ui.button("Help contents\tF1").clicked() {
+                                self.help_topic = help::ID_START;
+                                self.help_open = true;
+                                ui.close_menu();
+                            }
+                            if ui.button("About PrimeCrew Tweakinator 5000…").clicked() {
+                                self.about_open = true;
+                                ui.close_menu();
+                            }
+                        });
+                    });
+                });
+        }
+
+        fn draw_shot_tip(&self, ctx: &egui::Context) {
+            if !self.shot_tip {
+                return;
+            }
+            let k = theme::t();
+            // A tooltip-style bubble used only for the v1.3.0 screenshot of a circled-? tip.
+            egui::Area::new(egui::Id::new("shot-tip"))
+                .fixed_pos(egui::pos2(255.0, 168.0))
+                .order(egui::Order::Foreground)
+                .show(ctx, |ui| {
+                    egui::Frame::popup(ui.style())
+                        .inner_margin(egui::Margin::same(8))
+                        .show(ui, |ui| {
+                            ui.set_max_width(320.0);
+                            ui.add(egui::Label::new(egui::RichText::new(help::tip_for(Cat::Updates)).color(k.info)).wrap());
+                        });
+                });
+        }
+
+        fn tick_shot(&mut self, ctx: &egui::Context) {
+            let Some(shot) = self.shot.as_mut() else { return };
+            if shot.phase == ShotPhase::Done {
+                return;
+            }
+            match shot.phase {
+                ShotPhase::Main => {
+                    self.help_open = false;
+                    self.about_open = false;
+                    self.shot_tip = false;
+                }
+                ShotPhase::Help => {
+                    self.help_open = true;
+                    self.about_open = false;
+                    self.shot_tip = false;
+                    self.help_topic = help::ID_START;
+                }
+                ShotPhase::Tip => {
+                    self.help_open = false;
+                    self.about_open = false;
+                    self.shot_tip = true;
+                }
+                ShotPhase::About => {
+                    self.help_open = false;
+                    self.about_open = true;
+                    self.shot_tip = false;
+                }
+                ShotPhase::Done => {}
+            }
+            let mut got = None;
+            ctx.input(|i| {
+                for ev in &i.events {
+                    if let egui::Event::Screenshot { image, .. } = ev {
+                        got = Some(image.clone());
+                    }
+                }
+            });
+            if let Some(image) = got {
+                let name = match shot.phase {
+                    ShotPhase::Main => "01-main-menu-bar.png",
+                    ShotPhase::Help => "02-help-window.png",
+                    ShotPhase::Tip => "03-help-tip.png",
+                    ShotPhase::About => "04-about-popup.png",
+                    ShotPhase::Done => "done.png",
+                };
+                let path = shot.dir.join(name);
+                if let Err(e) = save_png(&path, &image) {
+                    eprintln!("screenshot {}: {e}", path.display());
+                } else {
+                    eprintln!("wrote {}", path.display());
+                }
+                shot.phase = match shot.phase {
+                    ShotPhase::Main => ShotPhase::Help,
+                    ShotPhase::Help => ShotPhase::Tip,
+                    ShotPhase::Tip => ShotPhase::About,
+                    ShotPhase::About | ShotPhase::Done => ShotPhase::Done,
+                };
+                shot.frames = 0;
+                shot.waiting = false;
+                if shot.phase == ShotPhase::Done {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                ctx.request_repaint();
+                return;
+            }
+            shot.frames = shot.frames.saturating_add(1);
+            if !shot.waiting && shot.frames >= 10 {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                shot.waiting = true;
+                shot.frames = 0;
+            }
+            ctx.request_repaint();
         }
 
         fn start<F>(&mut self, ctx: &egui::Context, name: &'static str, f: F)
@@ -440,16 +661,6 @@ mod gui {
                             }
                             r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Smaller text"));
                             ui.label(RichText::new("Text").color(k.muted));
-                            egui::ComboBox::from_id_salt("theme")
-                                .selected_text(p.look.label())
-                                .show_ui(ui, |ui| {
-                                    for l in Look::ALL {
-                                        ui.selectable_value(&mut p.look, l, l.label());
-                                    }
-                                })
-                                .response
-                                .on_hover_text("Theme: System follows Windows (falls back to Dark)");
-                            ui.label(RichText::new("Theme").color(k.muted));
                             self.set_prefs(ctx, p);
                         });
                     });
@@ -477,7 +688,7 @@ mod gui {
             let busy = self.busy();
             egui::TopBottomPanel::bottom("log")
                 .resizable(true)
-                .default_height(260.0)
+                .default_height(220.0)
                 .min_height(120.0)
                 .show(ctx, |ui| {
                     ui.add_space(4.0);
@@ -493,9 +704,7 @@ mod gui {
                                 ui.ctx().copy_text(t);
                             }
                             if ui.button("Open logs folder").clicked() {
-                                let d = ops::root_dir().join("Logs");
-                                let _ = std::fs::create_dir_all(&d);
-                                let _ = std::process::Command::new("explorer.exe").arg(d).spawn();
+                                self.open_logs();
                             }
                             let mut p = self.prefs;
                             egui::ComboBox::from_id_salt("mono")
@@ -543,10 +752,16 @@ mod gui {
                     self.restore_kill(ctx);
                 }
             }
+            if let Some(id) = help::take() {
+                self.help_topic = id;
+                self.help_open = true;
+            }
             let busy = self.busy();
             let can_change = self.admin && !busy && self.confirm.is_none();
             let k = theme::t();
+            let expert = self.prefs.expert;
 
+            self.menu_bar(ctx);
             self.header(ctx);
             self.status_bar(ctx);
             self.log_panel(ctx);
@@ -556,7 +771,11 @@ mod gui {
                     ui.add_space(6.0);
                     theme::card(ui, "Tweaks", |ui| {
                         for (i, c) in Cat::ALL.iter().enumerate() {
-                            ui.add_enabled(!busy, egui::Checkbox::new(&mut self.sel[i], c.title()));
+                            ui.horizontal_wrapped(|ui| {
+                                ui.add_enabled(!busy, egui::Checkbox::new(&mut self.sel[i], c.title()));
+                                help::mark(ui, help::tip_for(*c), help::id_for(*c), expert);
+                                help::link(ui, help::id_for(*c));
+                            });
                         }
                         ui.horizontal_wrapped(|ui| {
                             if ui.add_enabled(!busy, egui::Button::new("Select all").small()).clicked() {
@@ -567,18 +786,23 @@ mod gui {
                             }
                         });
                     });
-                    theme::card(ui, "Options", |ui| {
-                        ui.checkbox(&mut self.opts.restore_point, "Create System Restore point before Apply (recommended)");
-                        ui.checkbox(&mut self.opts.policy_only, "Updates: policy values only (leave services/tasks)");
-                        ui.checkbox(&mut self.opts.keep_m365, "Copilot: keep Microsoft 365 (OfficeHub) app");
-                        ui.checkbox(&mut self.opts.force_cleanup, "Cleanup: run even if a reboot is pending (not recommended)");
-                        ui.separator();
-                        let mut p = self.prefs;
-                        ui.checkbox(&mut p.expert, "Expert mode").on_hover_text("OneDrive wizard: skip the welcome screen and explanations, show registry paths, attrib flags and counts. Safety checks and confirmations stay.");
-                        ui.label(RichText::new(if p.expert { "Expert: compact wizard with technical details." } else { "Beginner (default): the wizard explains every step." }).small().color(k.muted));
-                        self.set_prefs(ui.ctx(), p);
-                        ui.separator();
-                        ui.label(RichText::new(format!("About: {APP_TITLE}")).small().color(k.muted));
+                    theme::card(ui, "Apply options", |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.checkbox(&mut self.opts.restore_point, "Create System Restore point before Apply (recommended)");
+                            help::mark(ui, "Creates a Windows System Restore point first. If this is ticked and the restore point cannot be created, Apply stops and nothing else is written.", help::ID_OPTIONS, expert);
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            ui.checkbox(&mut self.opts.policy_only, "Updates: policy values only (leave services/tasks)");
+                            help::mark(ui, "A lighter update kill: writes the basic policies only, and leaves services, tasks, the firewall and the no-phone-home policies alone.", help::ID_OPTIONS, expert);
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            ui.checkbox(&mut self.opts.keep_m365, "Copilot: keep Microsoft 365 (OfficeHub) app");
+                            help::mark(ui, "By default, removing Copilot also removes the Microsoft 365 (OfficeHub) app. Tick this to leave that app installed.", help::ID_OPTIONS, expert);
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            ui.checkbox(&mut self.opts.force_cleanup, "Cleanup: run even if a reboot is pending (not recommended)");
+                            help::mark(ui, "SoftwareDistribution cleanup normally refuses to run if a reboot is pending or TrustedInstaller is busy. Leave this off unless you know why you need it.", help::ID_OPTIONS, expert);
+                        });
                     });
                 });
             });
@@ -592,12 +816,14 @@ mod gui {
                             if ui.add_enabled(can_change && !sel.is_empty(), theme::primary_button("Apply selected…")).on_hover_text("Review the exact changes, then confirm").clicked() {
                                 self.confirm = Some(Pending::Apply { cats: sel.clone(), all: false });
                             }
+                            help::mark(ui, "Shows a list of the exact changes and asks you to confirm before anything is written.", help::ID_ACTIONS, expert);
                             if ui.add_enabled(can_change, egui::Button::new("Apply all…").min_size(egui::vec2(120.0, 32.0))).clicked() {
                                 self.confirm = Some(Pending::Apply { cats: Cat::ALL.to_vec(), all: true });
                             }
                             if ui.add_enabled(!busy, egui::Button::new(RichText::new("Verify (read-only)").color(k.info)).min_size(egui::vec2(140.0, 32.0))).on_hover_text("PASS / FAIL / WARN for every setting. Changes nothing.").clicked() {
                                 self.start(ctx, "Verify", ops::verify);
                             }
+                            help::mark(ui, "Read-only check. Reports PASS, FAIL or WARN for every setting. Changes nothing.", help::ID_ACTIONS, expert);
                         });
                         ui.add_space(2.0);
                         ui.horizontal_wrapped(|ui| {
@@ -605,6 +831,7 @@ mod gui {
                             if ui.add_enabled(can_change && !rsel.is_empty(), egui::Button::new(RichText::new("Revert selected…").color(k.err))).on_hover_text("Restore recorded originals for the ticked tweaks").clicked() {
                                 self.confirm = Some(Pending::Revert { cats: rsel });
                             }
+                            help::mark(ui, "Puts the recorded original settings back for the ticked tweaks. Cleanup cannot be reverted this way.", help::ID_ACTIONS, expert);
                             if ui.add_enabled(can_change, egui::Button::new(RichText::new("Revert all…").color(k.err))).clicked() {
                                 self.confirm = Some(Pending::Revert { cats: Cat::ALL.iter().copied().filter(|c| *c != Cat::Cleanup).collect() });
                             }
@@ -616,11 +843,13 @@ mod gui {
                             if ui.add_enabled(can_change, theme::primary_button("Restore update kill")).on_hover_text("Re-applies Updates exactly like Apply: policies, forced services incl. WaaSMedic, tasks, firewall, no-phone-home").clicked() {
                                 self.restore_kill(ctx);
                             }
+                            help::mark(ui, "Turns the hard Windows Update kill back on, and cancels a Temporary allow timer.", help::ID_TEMP, expert);
                         } else {
                             ui.horizontal_wrapped(|ui| {
                                 if ui.add_enabled(can_change, egui::Button::new(RichText::new("Temporarily allow updates…").color(k.warn)).min_size(egui::vec2(200.0, 30.0))).on_hover_text("Lift only the Updates kill so Microsoft Store / WinGet can update apps (PowerToys, ChatGPT…). Copilot / Spotlight / Win11 block stay.").clicked() {
                                     self.confirm = Some(Pending::TempAllow);
                                 }
+                                help::mark(ui, "Lifts just enough of the update kill so the Microsoft Store can update apps. Automatic OS updates stay off. Click for details.", help::ID_TEMP, expert);
                                 egui::ComboBox::from_id_salt("tempdur")
                                     .selected_text(preset_label(self.temp_minutes))
                                     .show_ui(ui, |ui| {
@@ -648,7 +877,11 @@ mod gui {
                         }
                     });
                     theme::card(ui, "OneDrive removal wizard", |ui| {
-                        ui.add(egui::Label::new(RichText::new("Step by step: make sure your files are on this PC, stop OneDrive syncing, then remove it. Your files are never deleted. Not part of Apply all.").color(k.muted)).wrap());
+                        ui.horizontal_wrapped(|ui| {
+                            ui.add(egui::Label::new(RichText::new("Step by step: make sure your files are on this PC, stop OneDrive syncing, then remove it. Your files are never deleted. Not part of Apply all.").color(k.muted)).wrap());
+                            help::mark(ui, "A guided wizard. Your files are never deleted. The wizard is not part of Apply all.", help::ID_ONEDRIVE, expert);
+                            help::link(ui, help::ID_ONEDRIVE);
+                        });
                         ui.horizontal_wrapped(|ui| {
                             if ui.add_enabled(!self.od_open, theme::primary_button("Open OneDrive wizard…")).clicked() {
                                 self.od_open = true;
@@ -663,11 +896,10 @@ mod gui {
                     });
                     theme::card(ui, "PowerShell fallback", |ui| {
                         ui.horizontal_wrapped(|ui| {
+                            help::mark(ui, "Puts an equivalent script on the clipboard, or writes the full script kit next to the exe. The pasted script does not record originals; use Revert in the app to undo.", help::ID_PS, expert);
+                            help::link(ui, help::ID_PS);
                             if ui.button("Copy PowerShell (selected)").clicked() {
-                                let s = psgen::generate(&self.selected(), self.opts);
-                                let n = s.lines().count();
-                                ctx.copy_text(s);
-                                self.push(Lvl::Info, format!("Copied generated PowerShell ({n} lines) for: {}. Paste into an elevated PowerShell.", self.selected().iter().map(|c| c.id()).collect::<Vec<_>>().join(", ")));
+                                self.copy_powershell(ctx);
                             }
                             if ui.button("Copy Apply-All-Tweaks.ps1").clicked() {
                                 ctx.copy_text(psgen::KIT[1].1.to_string());
@@ -688,7 +920,40 @@ mod gui {
             self.od_after_job(ctx);
             self.od_window(ctx);
             self.confirm_window(ctx);
+            help::show_window(ctx, &mut self.help_open, &mut self.help_topic);
+            help::show_about(ctx, &self.icon, &mut self.about_open);
+            self.draw_shot_tip(ctx);
+            self.tick_shot(ctx);
             theme::focus_ring(ctx);
+        }
+    }
+
+    fn save_png(path: &std::path::Path, image: &egui::ColorImage) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let raw = path.with_extension("rgba");
+        let mut buf = Vec::with_capacity(image.pixels.len() * 4);
+        for px in &image.pixels {
+            buf.extend_from_slice(&[px.r(), px.g(), px.b(), px.a()]);
+        }
+        std::fs::write(&raw, &buf).map_err(|e| e.to_string())?;
+        let script = path.with_extension("py");
+        std::fs::write(&script, include_str!("../../scripts/write_png.py")).map_err(|e| e.to_string())?;
+        let st = std::process::Command::new("python3")
+            .arg(&script)
+            .arg(path)
+            .arg(image.width().to_string())
+            .arg(image.height().to_string())
+            .arg(&raw)
+            .status()
+            .map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&raw);
+        let _ = std::fs::remove_file(&script);
+        if st.success() {
+            Ok(())
+        } else {
+            Err(format!("python3 write_png failed: {st}"))
         }
     }
 }

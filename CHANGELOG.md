@@ -2,6 +2,13 @@
 
 User-facing history for PrimeCrew Tweakinator 5000.
 
+## 1.3.0
+
+- Classic menu bar across the top: **File** (Copy PowerShell script, Open logs folder, Exit), **View** (Theme: System, Dark, Light, High contrast), **Options** (Expert mode, default off), and **Help** (Help contents / F1, About).
+- In-app Help window (resizable, topic list plus article) covering every setting and feature in plain language. Tweak topics include a registry list generated from the same catalog the app uses. A Help link on each tweak and in the OneDrive wizard opens the matching topic.
+- Circled question-mark tips next to settings, actions and wizard steps: hover for a short explanation, click to open Help. Shown in Beginner mode, and more quietly in Expert mode.
+- About PrimeCrew Tweakinator 5000 popup under Help (icon, name, version, PrimeCrew Software, a one-line description, private-build / MIT note). About is no longer listed under Options.
+
 ## 1.2.0
 
 - Rebranded to PrimeCrew Tweakinator 5000. Publisher / CompanyName is PrimeCrew Software.

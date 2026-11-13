@@ -2,13 +2,13 @@
 
 Portable Windows 10 tweak toolkit from PrimeCrew Software. A full x64 installer and a portable unsigned exe, plus a PowerShell fallback kit for the same settings. Shared with trusted friends, so every change is conservative: nothing is applied silently, Apply needs an explicit confirm, and **Verify** and **Revert** are first-class actions.
 
-**Version:** 1.2.0 (shown in the window title, the header, Options › About, and the exe version info). Every release ships both `PrimeCrewTweakinator5000-v1.2.0-x64-Setup.exe` and `PrimeCrewTweakinator5000-v1.2.0.zip`.
+**Version:** 1.3.0 (shown in the window title, the header, Help › About, and the exe version info). Every release ships both `PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe` and `PrimeCrewTweakinator5000-v1.3.0.zip`.
 
 **Requirements:** Windows 10 64-bit (aimed at Pro 22H2). The GUI needs a GPU/driver with OpenGL 2+ (normal on real hardware; may fail in a bare VM or some RDP sessions). No extra runtime. The app contains no network code and sends no telemetry.
 
-**Installer (recommended):** run `PrimeCrewTweakinator5000-v1.2.0-x64-Setup.exe`. It is 64-bit only and requires administrator rights. The app is installed to `C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\`, a shortcut is added under the **PrimeCrew Software** Start menu folder (the same kind of grouping Adobe apps use under Adobe), and an Add/Remove Programs entry is registered with Publisher **PrimeCrew Software**, DisplayVersion 1.2.0, the app icon, and a working uninstaller. An upgrade removes previous shortcuts first so they do not duplicate.
+**Installer (recommended):** run `PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe`. It is 64-bit only and requires administrator rights. The app is installed to `C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\`, a shortcut is added under the **PrimeCrew Software** Start menu folder (the same kind of grouping Adobe apps use under Adobe), and an Add/Remove Programs entry is registered with Publisher **PrimeCrew Software**, DisplayVersion 1.3.0, the app icon, and a working uninstaller. An upgrade removes previous shortcuts first so they do not duplicate.
 
-**Portable:** unzip `PrimeCrewTweakinator5000-v1.2.0.zip` and run `PrimeCrewTweakinator5000.exe` from any folder (for example `C:\Apps\PrimeCrewTweakinator5000\`).
+**Portable:** unzip `PrimeCrewTweakinator5000-v1.3.0.zip` and run `PrimeCrewTweakinator5000.exe` from any folder (for example `C:\Apps\PrimeCrewTweakinator5000\`).
 
 Double-click shows a UAC prompt (`requireAdministrator`). If the manifest is stripped, it falls back to a `runas` relaunch. SmartScreen may say "unknown publisher" (More info → Run anyway).
 
@@ -84,9 +84,24 @@ A step-by-step wizard, never part of Apply all. **Your files are never deleted**
 
 **Expert mode** (Options, off by default, saved in `ui.json`): skips the welcome screen and the explanations / (i) tips, and shows registry paths, attrib flags and counts. It keeps the files gate, every destructive confirm, and all Apply / Revert confirmations.
 
+### Menu bar, Help, and About
+
+A classic menu bar sits across the top:
+
+- **File** — Copy PowerShell script, Open logs folder (`C:\ProgramData\Win10Tweaks\Logs`), Exit.
+- **View** — Theme (System, Dark, Light, High contrast). Text size stays in the header (and **Ctrl +/−/0**, **Ctrl+wheel**).
+- **Options** — Expert mode (off by default, saved in `ui.json`). Apply-time checkboxes (restore point, policy only, keep Microsoft 365, cleanup override) stay in the Apply options card.
+- **Help** — Help contents (F1), and **About PrimeCrew Tweakinator 5000…**
+
+The Help window is resizable, with a topic list on the left and readable text on the right. It covers getting started, every tweak (what it changes, why you might want it, risks, and how to undo it — registry lists are generated from the same catalog the app uses), Temporary allow, the OneDrive wizard step by step, themes, the PowerShell fallback, logs, uninstalling, and known limits. A small “Help” link on each tweak and in the wizard opens the matching topic.
+
+Circled question marks (a “?” inside a circle, not a “(?)” label) sit next to settings, actions and wizard steps. Hover for a short explanation; click to open that Help topic. They are shown in Beginner mode and, more quietly, in Expert mode.
+
+The About popup (Help menu only) shows the app icon, the name, the version from the package metadata, “by PrimeCrew Software”, a one-line description, and a private-build / MIT note. About is no longer listed under Options.
+
 ### Themes
 
-**System** (follows Windows; default), **Dark**, **Light**, and **High contrast**. Text size 75–300 % via the header buttons, **Ctrl +/−/0**, or **Ctrl+wheel**. Log font size is separate. Saved in `ui.json`.
+**System** (follows Windows; default), **Dark**, **Light**, and **High contrast**, chosen from **View ▸ Theme**. Text size 75–300 % via the header buttons, **Ctrl +/−/0**, or **Ctrl+wheel**. Log font size is separate. Saved in `ui.json`.
 
 ### PowerShell fallback kit
 
@@ -195,8 +210,8 @@ Output: `app/target/x86_64-pc-windows-gnullvm/release/PrimeCrewTweakinator5000.e
 Release artifacts:
 
 ```
-PrimeCrewTweakinator5000-v1.2.0-x64-Setup.exe
-PrimeCrewTweakinator5000-v1.2.0.zip
+PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe
+PrimeCrewTweakinator5000-v1.3.0.zip
   PrimeCrewTweakinator5000/PrimeCrewTweakinator5000.exe
   PrimeCrewTweakinator5000/README.md
 ```
