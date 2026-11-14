@@ -2,6 +2,15 @@
 
 User-facing history for PrimeCrew Tweakinator 5000.
 
+## 1.4.0
+
+- Pre-flight check (read-only) before Apply, also shown on the main window under This PC: administrator rights, whether the signed-in account is an administrator, the UAC level (info only — never changed), Microsoft Defender Tamper Protection and any third-party antivirus, a mismatch between the elevated and signed-in accounts, a pending reboot, and whether this is Windows 10 or 11. If the app is not elevated, a Restart as administrator button asks Windows for a UAC prompt. Each item has a Help link.
+- After Apply, Beginner mode shows a summary dialog with counts of changes made, already done (skipped), and real problems, plus next steps (reboot, then Verify). If there were no real problems, it says “Everything worked.” Each real error gets a one-line explanation.
+- Friendlier logs: a Beginner-mode legend explains that “Access denied” followed by SET means Windows resisted and the app handled it, and that only red ERROR lines need attention. Protected-task and WaaSMedicSvc lines use plain wording; the raw technical text is in the log file and, in Expert mode, on screen in a quieter style.
+- False errors cleaned up: a leftover Store app version that is already gone (HRESULT 0x80073CF1, “Package was not found”) is logged as SKIP, not ERROR. Removing an app for the current user when the all-users remove fails is logged as a successful change with a calm note. The News and interests per-user taskbar value, which Windows often locks, is SKIP when the EnableFeeds policy is already off, and Verify checks that policy instead. Windows 11-only values (the taskbar widgets button, and widgets on the lock screen) are skipped on Windows 10 with no attempt and no error, and Verify does not fail on them.
+- About says “Free for personal use. Use at your own risk — read Help ▸ Known limits,” plus the MIT license line. An MIT LICENSE file (copyright PrimeCrew Software) is in the repository.
+- Help topics: Understanding the log, and Pre-flight check.
+
 ## 1.3.0
 
 - Classic menu bar across the top: **File** (Copy PowerShell script, Open logs folder, Exit), **View** (Theme: System, Dark, Light, High contrast), **Options** (Expert mode, default off), and **Help** (Help contents / F1, About).

@@ -40,9 +40,21 @@ pub mod ops {
     }
 
     pub enum Msg {
-        Line(Lvl, String),
+        Line(Lvl, String, Option<String>),
         Done(String),
+        Summary(ApplySummary),
     }
+
+    #[derive(Clone, Debug)]
+    pub struct ApplySummary {
+        pub title: String,
+        pub set: usize,
+        pub skip: usize,
+        pub errors: usize,
+        pub problems: Vec<(String, String)>,
+    }
+
+    pub const LOG_LEGEND: &str = "'Access denied' followed by SET means Windows resisted and the app handled it. Only red ERROR lines need attention.";
 
     #[derive(Clone, Copy, Default)]
     pub struct Opts {
@@ -56,6 +68,9 @@ pub mod ops {
         tx: Sender<Msg>,
         file: Option<std::fs::File>,
         pub errors: usize,
+        pub sets: usize,
+        pub skips: usize,
+        pub problems: Vec<(String, String)>,
         pub counts: [usize; 3],
     }
 
@@ -69,18 +84,23 @@ pub mod ops {
             let _ = std::fs::create_dir_all(&dir);
             let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
             let file = std::fs::File::create(dir.join(format!("GUI-{name}-{ts}.log"))).ok();
-            Log { tx, file, errors: 0, counts: [0; 3] }
+            Log { tx, file, errors: 0, sets: 0, skips: 0, problems: vec![], counts: [0; 3] }
         }
         pub fn w(&mut self, l: Lvl, s: impl Into<String>) {
+            self.w_detail(l, s, None);
+        }
+        pub fn w_detail(&mut self, l: Lvl, s: impl Into<String>, detail: Option<String>) {
             let s = s.into();
             if let Some(f) = self.file.as_mut() {
-                let _ = writeln!(f, "{} [{}] {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), l.tag(), s);
+                let extra = detail.as_deref().map(|d| format!("  [{d}]")).unwrap_or_default();
+                let _ = writeln!(f, "{} [{}] {}{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), l.tag(), s, extra);
             }
-            let _ = self.tx.send(Msg::Line(l, s));
+            let _ = self.tx.send(Msg::Line(l, s, detail));
         }
         pub fn done(&self, s: impl Into<String>) {
             let _ = self.tx.send(Msg::Done(s.into()));
         }
+        pub fn emit_summary(&self, _title: impl Into<String>) {}
     }
 
     pub fn load_state() -> Map<String, Value> {
@@ -142,8 +162,67 @@ pub mod sys {
     pub fn user_mismatch() -> Option<(String, String)> {
         None
     }
+    pub fn process_user() -> String {
+        r"PREVIEW\Admin".into()
+    }
+    pub fn session_user() -> Option<String> {
+        Some(process_user())
+    }
+    pub fn os_build() -> u32 {
+        19045
+    }
+    pub fn os_product_name() -> String {
+        "Windows 10 Pro".into()
+    }
+    pub fn is_windows_11() -> bool {
+        false
+    }
     pub fn os_summary() -> String {
-        "Windows 10 Pro 22H2".into()
+        r"Windows 10 Pro | Professional | 22H2 | build 19045.0 | PREVIEW | user PREVIEW\Admin".into()
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Preflight {
+        pub elevated: bool,
+        pub process_user: String,
+        pub session_user: Option<String>,
+        pub session_is_admin: Option<bool>,
+        pub mismatch: Option<(String, String)>,
+        pub enable_lua: Option<u32>,
+        pub consent_admin: Option<u32>,
+        pub tamper_on: Option<bool>,
+        pub third_party_av: Vec<String>,
+        pub reboot_pending: Vec<String>,
+        pub build: u32,
+        pub product_name: String,
+        pub windows11: bool,
+    }
+
+    impl Preflight {
+        pub fn uac_summary() -> &'static str {
+            "The UAC level does not change what this app can do once it is running as administrator. This app never changes UAC settings."
+        }
+        pub fn uac_label(&self) -> String {
+            "UAC is on — Prompt for consent for non-Windows programs (Windows default)".into()
+        }
+    }
+
+    pub fn preflight() -> Preflight {
+        Preflight {
+            elevated: true,
+            process_user: process_user(),
+            session_user: session_user(),
+            session_is_admin: Some(true),
+            mismatch: None,
+            enable_lua: Some(1),
+            consent_admin: Some(5),
+            tamper_on: Some(true),
+            third_party_av: vec![],
+            reboot_pending: vec![],
+            build: 19045,
+            product_name: "Windows 10 Pro".into(),
+            windows11: false,
+        }
     }
 }
 

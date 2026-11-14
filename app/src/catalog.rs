@@ -89,6 +89,11 @@ pub struct RegItem {
     pub name: &'static str,
     pub val: Val,
     pub level: Level,
+    /// 0 = any Windows version. `WIN11_BUILD` (22000) means skip on Windows 10: do not write, and do not fail Verify.
+    pub min_build: u32,
+    /// If writing this value is refused, and this policy is already at its desired value, log SKIP (not ERROR).
+    /// Verify checks that policy, not this (often-locked) per-user value.
+    pub covered_by: Option<(&'static str, &'static str)>,
 }
 
 const WU: &str = r"HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate";
@@ -100,9 +105,18 @@ const CCM: &str = r"HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent";
 const ADV: &str = r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
 const DSH: &str = r"HKLM:\SOFTWARE\Policies\Microsoft\Dsh";
 
+/// First Windows 11 production build. Values with min_build == this are skipped on Windows 10.
+pub const WIN11_BUILD: u32 = 22000;
+
 macro_rules! r {
     ($c:ident, $p:expr, $n:expr, $v:expr, $l:ident) => {
-        RegItem { cat: Cat::$c, path: $p, name: $n, val: $v, level: Level::$l }
+        RegItem { cat: Cat::$c, path: $p, name: $n, val: $v, level: Level::$l, min_build: 0, covered_by: None }
+    };
+    ($c:ident, $p:expr, $n:expr, $v:expr, $l:ident, win11) => {
+        RegItem { cat: Cat::$c, path: $p, name: $n, val: $v, level: Level::$l, min_build: WIN11_BUILD, covered_by: None }
+    };
+    ($c:ident, $p:expr, $n:expr, $v:expr, $l:ident, covered($pp:expr, $pn:expr)) => {
+        RegItem { cat: Cat::$c, path: $p, name: $n, val: $v, level: Level::$l, min_build: 0, covered_by: Some(($pp, $pn)) }
     };
 }
 
@@ -166,10 +180,11 @@ pub const REG: &[RegItem] = &[
     r!(Spotlight, CCM, "DisableCloudOptimizedContent", Val::D(1), BestEffort),
     // News and interests / widgets / search highlights
     r!(Spotlight, r"HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds", "EnableFeeds", Val::D(0), Core),
-    r!(Spotlight, r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds", "ShellFeedsTaskbarViewMode", Val::D(2), BestEffort),
+    // Windows often locks this per-user value; EnableFeeds=0 already turns News and interests off.
+    r!(Spotlight, r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds", "ShellFeedsTaskbarViewMode", Val::D(2), BestEffort, covered(r"HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds", "EnableFeeds")),
     r!(Spotlight, DSH, "AllowNewsAndInterests", Val::D(0), BestEffort),
-    r!(Spotlight, DSH, "DisableWidgetsOnLockScreen", Val::D(1), BestEffort),
-    r!(Spotlight, ADV, "TaskbarDa", Val::D(0), BestEffort),
+    r!(Spotlight, DSH, "DisableWidgetsOnLockScreen", Val::D(1), BestEffort, win11),
+    r!(Spotlight, ADV, "TaskbarDa", Val::D(0), BestEffort, win11),
     r!(Spotlight, r"HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search", "EnableDynamicContentInWSB", Val::D(0), Core),
     // OneDrive blocks (written only by the wizard's Remove step; Microsoft Learn: OneDrive GPOs + Policy CSP System/DisableOneDriveFileSync)
     r!(OneDrive, OD_WINPOL, "DisableFileSyncNGSC", Val::D(1), Core),

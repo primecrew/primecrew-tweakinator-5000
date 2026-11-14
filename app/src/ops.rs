@@ -33,8 +33,50 @@ impl Lvl {
 }
 
 pub enum Msg {
-    Line(Lvl, String),
+    Line(Lvl, String, Option<String>),
     Done(String),
+    /// Shown as a beginner-mode dialog after Apply (and Restore update kill).
+    Summary(ApplySummary),
+}
+
+#[derive(Clone, Debug)]
+pub struct ApplySummary {
+    pub title: String,
+    pub set: usize,
+    pub skip: usize,
+    pub errors: usize,
+    pub problems: Vec<(String, String)>,
+}
+
+/// Shown at the top of the on-screen log in Beginner mode, and written once at the start of Apply.
+pub const LOG_LEGEND: &str = "'Access denied' followed by SET means Windows resisted and the app handled it. Only red ERROR lines need attention.";
+
+pub fn plain_error(text: &str) -> String {
+    let t = text.to_ascii_lowercase();
+    if t.contains("aborted: no restore") || t.contains("restore point failed") || t.contains("restore point not created") {
+        "A System Restore point could not be created. System Protection may be off for drive C, or Windows already made one in the last 24 hours.".into()
+    } else if t.contains("0x80073cf1") || t.contains("package was not found") {
+        "An old leftover app entry was already gone, so there was nothing to remove.".into()
+    } else if t.contains("appx") || t.contains("provisioned") {
+        "A built-in Windows app could not be removed.".into()
+    } else if t.contains("firewall") {
+        "A firewall rule could not be added or removed.".into()
+    } else if t.contains("acl") || t.contains("ownership") {
+        "Windows would not let the app change permissions on a protected service key.".into()
+    } else if t.contains("service") && (t.contains("could not force") || t.contains("could not stop") || t.contains("could not start")) {
+        "A Windows service could not be changed or stopped.".into()
+    } else if t.contains("access is denied") || t.contains("os error 5") {
+        "Windows blocked a setting change.".into()
+    } else if t.contains("ed7ba470") || t.contains("god mode") {
+        "The God Mode folder could not be created on the Desktop.".into()
+    } else {
+        let one = text.split('\n').next().unwrap_or(text);
+        if one.chars().count() > 180 {
+            format!("{}…", one.chars().take(180).collect::<String>())
+        } else {
+            one.to_string()
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default)]
@@ -49,6 +91,9 @@ pub struct Log {
     tx: Sender<Msg>,
     file: Option<std::fs::File>,
     pub errors: usize,
+    pub sets: usize,
+    pub skips: usize,
+    pub problems: Vec<(String, String)>,
     pub counts: [usize; 3], // pass, fail, warn
 }
 
@@ -62,20 +107,29 @@ impl Log {
         let _ = std::fs::create_dir_all(&dir);
         let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
         let file = std::fs::File::create(dir.join(format!("GUI-{name}-{ts}.log"))).ok();
-        Log { tx, file, errors: 0, counts: [0; 3] }
+        Log { tx, file, errors: 0, sets: 0, skips: 0, problems: vec![], counts: [0; 3] }
     }
     pub fn w(&mut self, l: Lvl, s: impl Into<String>) {
+        self.w_detail(l, s, None);
+    }
+    pub fn w_detail(&mut self, l: Lvl, s: impl Into<String>, detail: Option<String>) {
         let s = s.into();
         match l {
-            Lvl::Error => self.errors += 1,
+            Lvl::Error => {
+                self.errors += 1;
+                self.problems.push((s.clone(), plain_error(&s)));
+            }
+            Lvl::Set => self.sets += 1,
+            Lvl::Skip => self.skips += 1,
             Lvl::Pass => self.counts[0] += 1,
             Lvl::Fail => self.counts[1] += 1,
             _ => {}
         }
         if let Some(f) = self.file.as_mut() {
-            let _ = writeln!(f, "{} [{}] {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), l.tag(), s);
+            let extra = detail.as_deref().map(|d| format!("  [{d}]")).unwrap_or_default();
+            let _ = writeln!(f, "{} [{}] {}{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), l.tag(), s, extra);
         }
-        let _ = self.tx.send(Msg::Line(l, s));
+        let _ = self.tx.send(Msg::Line(l, s, detail));
     }
     pub(crate) fn warn_v(&mut self, s: impl Into<String>) {
         self.counts[2] += 1;
@@ -83,6 +137,15 @@ impl Log {
     }
     pub fn done(&self, s: impl Into<String>) {
         let _ = self.tx.send(Msg::Done(s.into()));
+    }
+    pub fn emit_summary(&self, title: impl Into<String>) {
+        let _ = self.tx.send(Msg::Summary(ApplySummary {
+            title: title.into(),
+            set: self.sets,
+            skip: self.skips,
+            errors: self.errors,
+            problems: self.problems.clone(),
+        }));
     }
 }
 
@@ -142,6 +205,10 @@ pub(crate) fn matches(cur: &Cur, v: Val) -> bool {
 
 pub(crate) fn set_reg(log: &mut Log, it: &RegItem) {
     let target = format!("{}\\{}", it.path, it.name);
+    if it.min_build > 0 && sys::os_build() < it.min_build {
+        log.w(Lvl::Skip, format!("{target} is for Windows 11 (build {}+); skipped on this PC (build {})", it.min_build, sys::os_build()));
+        return;
+    }
     let cur = sys::reg_get(it.path, it.name);
     if matches(&cur, it.val) {
         log.w(Lvl::Skip, format!("{target} already = {} ({})", it.val.text(), it.val.kind()));
@@ -164,7 +231,23 @@ pub(crate) fn set_reg(log: &mut Log, it: &RegItem) {
     };
     match r {
         Ok(()) => log.w(Lvl::Set, format!("{target} : {} -> {} ({})", cur.show(), it.val.text(), it.val.kind())),
-        Err(e) => log.w(Lvl::Error, format!("{target} : failed ({e})")),
+        Err(e) => {
+            if let Some((pp, pn)) = it.covered_by {
+                let policy = REG.iter().find(|i| i.path == pp && i.name == pn);
+                let desired = policy.map(|i| i.val);
+                let cur_pol = sys::reg_get(pp, pn);
+                if desired.is_some_and(|v| matches(&cur_pol, v)) {
+                    let why = if it.name == "ShellFeedsTaskbarViewMode" {
+                        "Windows locks this setting; the policy above already turns News and interests off"
+                    } else {
+                        "Windows locks this setting; the policy above already applies the change"
+                    };
+                    log.w(Lvl::Skip, format!("{target} : {why}"));
+                    return;
+                }
+            }
+            log.w(Lvl::Error, format!("{target} : failed ({e})"));
+        }
     }
 }
 
@@ -234,7 +317,7 @@ fn set_service(log: &mut Log, name: &str, start: u32, delayed: Option<u32>, stop
                     if let Some(dv) = delayed {
                         let _ = sys::reg_set_dword(&svc_key(name), "DelayedAutostart", dv);
                     }
-                    log.w(Lvl::Set, format!("{target} : {cur} -> {start} via registry (SCM refused: {scm}; effective after reboot)"));
+                    log.w_detail(Lvl::Set, format!("{target} : {cur} -> {start} via registry (Windows protects this service — normal; takes effect after reboot)"), Some(format!("SCM refused: {scm}")));
                 }
                 Err(e) if force => log.w(Lvl::Error, format!("{target} : could not force Start={start} ({e})")),
                 Err(e) => log.w(Lvl::Warn, format!("{target} : Windows refused the change ({e})")),
@@ -374,7 +457,7 @@ pub(crate) fn disable_task(log: &mut Log, path: &str, name: &str, state: &str, c
     let now = task_state(path, name);
     if now == "Disabled" {
         record_once(&format!("TASK|{path}{name}"), obj(json!({"Category": cat.id(), "Kind": "Task", "TaskPath": path, "TaskName": name, "State": state, "Method": "System"})));
-        log.w(Lvl::Set, format!("{target} : {state} -> Disabled (as SYSTEM; admin was refused: {why})"));
+        log.w_detail(Lvl::Set, format!("{target} : {state} -> Disabled (Windows protects this task, so the app used its built-in SYSTEM helper — this is normal)"), Some(format!("as SYSTEM; Disable-ScheduledTask was refused: {why}")));
     } else {
         log.w(Lvl::Warn, format!("{target} : refused even as SYSTEM (now {now}; {}). Harmless while the update services are Start=4.", if sok { "no change".to_string() } else { sout.lines().last().unwrap_or("").to_string() }));
     }
@@ -629,10 +712,16 @@ pub fn temp_allow(log: &mut Log, minutes: Option<u32>) {
 /// Re-applies the Updates category exactly like Apply (same mode as last Apply; default = full kill). No restore point.
 pub fn restore_kill(log: &mut Log) {
     log.w(Lvl::Info, "Restoring the Windows Update kill (same as Apply > Updates).");
+    log.w(Lvl::Info, LOG_LEGEND);
     log.w(Lvl::Warn, SECURITY_NOTE);
     apply_updates(log, mode_policy_only().unwrap_or(false));
     let e = log.errors;
-    log.w(if e == 0 { Lvl::Info } else { Lvl::Warn }, format!("Restore update kill finished with {e} error(s)."));
+    if e == 0 {
+        log.w(Lvl::Info, "Restore update kill finished. Everything worked. Reboot, then Verify.");
+    } else {
+        log.w(Lvl::Warn, format!("Restore update kill finished with {e} real problem(s). Reboot, then Verify."));
+    }
+    log.emit_summary("Restore update kill finished");
     log.done("Update kill restored");
 }
 
@@ -693,6 +782,7 @@ pub fn restore_point(log: &mut Log) -> bool {
 
 pub fn apply(log: &mut Log, cats: &[Cat], o: Opts) {
     log.w(Lvl::Info, format!("OS: {}", sys::os_summary()));
+    log.w(Lvl::Info, LOG_LEGEND);
     if cats.contains(&Cat::Updates) {
         log.w(Lvl::Warn, SECURITY_NOTE);
     }
@@ -734,8 +824,28 @@ pub fn apply(log: &mut Log, cats: &[Cat], o: Opts) {
         }
     }
     let e = log.errors;
-    log.w(if e == 0 { Lvl::Info } else { Lvl::Warn }, format!("Apply finished with {e} error(s). Reboot, then Verify."));
+    if e == 0 {
+        log.w(Lvl::Info, "Apply finished. Everything worked. Reboot, then Verify.");
+    } else {
+        log.w(Lvl::Warn, format!("Apply finished with {e} real problem(s). Reboot, then Verify."));
+    }
+    log.emit_summary("Apply finished");
     log.done("Apply finished");
+}
+
+
+fn package_not_found(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("0x80073cf1") || m.contains("package was not found")
+}
+
+/// List Appx packages that are actually installed for some user, skipping stale catalog leftovers.
+fn list_installed_appx(name: &str) -> Vec<String> {
+    let (_, out) = sys::ps(&format!(
+        "Get-AppxPackage -AllUsers -Name {n} -ErrorAction SilentlyContinue | ForEach-Object {{            $full=$_.PackageFullName; $states=@();            try {{ $states=@($_.PackageUserInformation | ForEach-Object {{ [string]$_.InstallState }}) }} catch {{}};            $ok=$states | Where-Object {{ $_ -match 'Installed' }};            $loc=$_.InstallLocation;            if($ok){{ $full }} elseif($loc -and (Test-Path -LiteralPath $loc)){{ $full }}          }}",
+        n = sys::ps_quote(name)
+    ));
+    out.lines().map(|l| l.trim().to_string()).filter(|l| l.starts_with(name)).collect()
 }
 
 fn copilot(log: &mut Log, keep_m365: bool) {
@@ -751,8 +861,7 @@ fn copilot(log: &mut Log, keep_m365: bool) {
         pkgs.push(PKG_M365);
     }
     for (name, family) in pkgs {
-        let (_, out) = sys::ps(&format!("Get-AppxPackage -AllUsers -Name {} | ForEach-Object {{ $_.PackageFullName }}", sys::ps_quote(name)));
-        let full: Vec<String> = out.lines().map(|l| l.trim().to_string()).filter(|l| l.starts_with(name)).collect();
+        let full = list_installed_appx(name);
         if full.is_empty() {
             log.w(Lvl::Skip, format!("Appx {name} not installed for any user"));
         }
@@ -760,13 +869,23 @@ fn copilot(log: &mut Log, keep_m365: bool) {
             let (ok, o1) = sys::ps(&format!("Remove-AppxPackage -Package {} -AllUsers", sys::ps_quote(&f)));
             if ok {
                 log.w(Lvl::Set, format!("Appx {f} : installed -> removed (all users)"));
+                continue;
+            }
+            if package_not_found(&o1) {
+                log.w(Lvl::Skip, format!("Appx {f} : old leftover entry, nothing to remove"));
+                continue;
+            }
+            let (ok2, o2) = sys::ps(&format!("Remove-AppxPackage -Package {}", sys::ps_quote(&f)));
+            if ok2 {
+                log.w_detail(
+                    Lvl::Set,
+                    format!("Appx {f} : installed -> removed for the current user (could not remove it for every account; that is often normal)"),
+                    o1.lines().next().map(|s| s.to_string()),
+                );
+            } else if package_not_found(&o2) {
+                log.w(Lvl::Skip, format!("Appx {f} : old leftover entry, nothing to remove"));
             } else {
-                let (ok2, o2) = sys::ps(&format!("Remove-AppxPackage -Package {}", sys::ps_quote(&f)));
-                if ok2 {
-                    log.w(Lvl::Set, format!("Appx {f} : installed -> removed (current user; all-users failed: {})", o1.lines().next().unwrap_or("")));
-                } else {
-                    log.w(Lvl::Error, format!("Appx {f} : remove failed ({})", o2.lines().next().unwrap_or("")));
-                }
+                log.w(Lvl::Error, format!("Appx {f} : remove failed ({})", o2.lines().next().unwrap_or("")));
             }
         }
         let (_, out) = sys::ps(&format!(
@@ -938,6 +1057,15 @@ pub fn verify(log: &mut Log) {
     for it in REG {
         let cur = sys::reg_get(it.path, it.name);
         let t = format!("[{}] {}\\{}", it.cat.id(), it.path, it.name);
+        if it.min_build > 0 && sys::os_build() < it.min_build {
+            log.w(Lvl::Skip, format!("{t} is for Windows 11; not checked on this PC (build {})", sys::os_build()));
+            continue;
+        }
+        if it.covered_by.is_some() {
+            // The covering policy is verified as its own catalog item. This per-user value is often locked by Windows.
+            log.w(Lvl::Skip, format!("{t} not checked (Windows may lock this value; the matching policy is the one that matters)"));
+            continue;
+        }
         if it.level == Level::Hard && !hard {
             log.w(Lvl::Skip, format!("{t} (hard kill; not used in policy-only mode) now {}", cur.show()));
             continue;

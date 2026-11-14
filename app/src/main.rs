@@ -74,7 +74,7 @@ fn main() -> eframe::Result<()> {
 mod gui {
 
     use crate::catalog::*;
-    use crate::ops::{self, Log, Lvl, Msg, Opts};
+    use crate::ops::{self, ApplySummary, Log, Lvl, Msg, Opts, LOG_LEGEND};
     use crate::help;
     use crate::theme::{self, Look, Prefs};
     use crate::{psgen, sys};
@@ -114,6 +114,8 @@ mod gui {
         Help,
         Tip,
         About,
+        Preflight,
+        Summary,
         Done,
     }
 
@@ -129,10 +131,12 @@ mod gui {
         os: String,
         sel: [bool; 7],
         opts: Opts,
-        log: Vec<(Lvl, String)>,
+        log: Vec<(Lvl, String, Option<String>)>,
         rx: Option<Receiver<Msg>>,
         status: String,
         confirm: Option<Pending>,
+        preflight: sys::Preflight,
+        summary: Option<ApplySummary>,
         ack_updates: bool,
         ack_all: bool,
         prefs: Prefs,
@@ -187,6 +191,8 @@ mod gui {
                 rx: None,
                 status: "Idle".into(),
                 confirm: None,
+                preflight: sys::preflight(),
+                summary: None,
                 ack_updates: false,
                 ack_all: false,
                 prefs,
@@ -229,7 +235,7 @@ mod gui {
         }
 
         fn push(&mut self, l: Lvl, s: impl Into<String>) {
-            self.log.push((l, s.into()));
+            self.log.push((l, s.into(), None));
         }
 
         fn busy(&self) -> bool {
@@ -378,6 +384,8 @@ mod gui {
                     self.help_open = false;
                     self.about_open = false;
                     self.shot_tip = false;
+                    self.confirm = None;
+                    self.summary = None;
                 }
                 ShotPhase::Help => {
                     self.help_open = true;
@@ -394,6 +402,35 @@ mod gui {
                     self.help_open = false;
                     self.about_open = true;
                     self.shot_tip = false;
+                    self.confirm = None;
+                    self.summary = None;
+                }
+                ShotPhase::Preflight => {
+                    self.help_open = false;
+                    self.about_open = false;
+                    self.shot_tip = false;
+                    self.summary = None;
+                    if self.confirm.is_none() {
+                        self.preflight = sys::preflight();
+                        self.mismatch = self.preflight.mismatch.clone();
+                        self.admin = self.preflight.elevated;
+                        self.confirm = Some(Pending::Apply { cats: Cat::ALL.iter().copied().filter(|c| *c != Cat::Cleanup).collect(), all: false });
+                    }
+                }
+                ShotPhase::Summary => {
+                    self.help_open = false;
+                    self.about_open = false;
+                    self.shot_tip = false;
+                    self.confirm = None;
+                    if self.summary.is_none() {
+                        self.summary = Some(ApplySummary {
+                            title: "Apply finished".into(),
+                            set: 47,
+                            skip: 8,
+                            errors: 0,
+                            problems: vec![],
+                        });
+                    }
                 }
                 ShotPhase::Done => {}
             }
@@ -411,6 +448,8 @@ mod gui {
                     ShotPhase::Help => "02-help-window.png",
                     ShotPhase::Tip => "03-help-tip.png",
                     ShotPhase::About => "04-about-popup.png",
+                    ShotPhase::Preflight => "05-preflight-apply.png",
+                    ShotPhase::Summary => "06-apply-summary.png",
                     ShotPhase::Done => "done.png",
                 };
                 let path = shot.dir.join(name);
@@ -423,7 +462,9 @@ mod gui {
                     ShotPhase::Main => ShotPhase::Help,
                     ShotPhase::Help => ShotPhase::Tip,
                     ShotPhase::Tip => ShotPhase::About,
-                    ShotPhase::About | ShotPhase::Done => ShotPhase::Done,
+                    ShotPhase::About => ShotPhase::Preflight,
+                    ShotPhase::Preflight => ShotPhase::Summary,
+                    ShotPhase::Summary | ShotPhase::Done => ShotPhase::Done,
                 };
                 shot.frames = 0;
                 shot.waiting = false;
@@ -434,7 +475,11 @@ mod gui {
                 return;
             }
             shot.frames = shot.frames.saturating_add(1);
-            if !shot.waiting && shot.frames >= 10 {
+            let need = match shot.phase {
+                ShotPhase::Preflight | ShotPhase::Summary => 18,
+                _ => 10,
+            };
+            if !shot.waiting && shot.frames >= need {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
                 shot.waiting = true;
                 shot.frames = 0;
@@ -463,8 +508,13 @@ mod gui {
             if let Some(rx) = &self.rx {
                 while let Ok(m) = rx.try_recv() {
                     match m {
-                        Msg::Line(l, s) => self.log.push((l, s)),
+                        Msg::Line(l, s, d) => self.log.push((l, s, d)),
                         Msg::Done(s) => finished = Some(s),
+                        Msg::Summary(sum) => {
+                            if !self.prefs.expert {
+                                self.summary = Some(sum);
+                            }
+                        }
                     }
                 }
             }
@@ -482,7 +532,7 @@ mod gui {
                 let extra = match c {
                     Cat::Cleanup => "stop wuauserv/bits; delete Download\\*, PostRebootEventCache.V2\\*, ReportingEvents.log; restart what was running".to_string(),
                     Cat::Updates if o.policy_only => "policy values only".into(),
-                    Cat::Updates => format!("+ no-phone-home policies (DoNotConnect…, DisableWindowsUpdateAccess, WU pointed at {DEAD_WSUS}, DO mode 99); disable WaaSMedic/UpdateOrchestrator/WindowsUpdate tasks (as SYSTEM if admin is refused); WaaSMedicSvc, uhssvc, UsoSvc, wuauserv -> Disabled + stopped; take ownership of the WaaSMedicSvc service registry KEY (not files) and deny SYSTEM writes to it; firewall outbound block rules {FW_PREFIX}*"),
+                    Cat::Updates => format!("+ no-phone-home policies (DoNotConnect…, DisableWindowsUpdateAccess, WU pointed at {DEAD_WSUS}, DO mode 99); disable WaaSMedic/UpdateOrchestrator/WindowsUpdate tasks (using a built-in SYSTEM helper if Windows protects them); WaaSMedicSvc, uhssvc, UsoSvc, wuauserv -> Disabled + stopped; take ownership of the WaaSMedicSvc service registry KEY (not files) and deny SYSTEM writes to it; firewall outbound block rules {FW_PREFIX}*"),
                     Cat::Notifications => "disable task USO_UxBroker".into(),
                     Cat::Copilot => format!("kill Copilot processes; remove Appx Microsoft.Copilot{} (all users + provisioned); add Deprovisioned keys", if o.keep_m365 { "" } else { " + Microsoft.MicrosoftOfficeHub" }),
                     Cat::GodMode => format!("create {}\\{}", sys::desktop_dir().display(), GODMODE_NAME),
@@ -498,6 +548,173 @@ mod gui {
                 v.push(line);
             }
             v
+        }
+
+
+        fn refresh_preflight(&mut self) {
+            self.preflight = sys::preflight();
+            self.mismatch = self.preflight.mismatch.clone();
+            self.admin = self.preflight.elevated;
+        }
+
+        fn preflight_rows(&self, ui: &mut egui::Ui, offer_relaunch: bool) {
+            let k = theme::t();
+            let pf = &self.preflight;
+            let row = |ui: &mut egui::Ui, color: egui::Color32, title: &str, body: &str, topic: &'static str| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new(title).strong().color(color));
+                    help::link(ui, topic);
+                });
+                if !body.is_empty() {
+                    ui.add(egui::Label::new(RichText::new(body).small().color(k.muted)).wrap());
+                }
+            };
+
+            if pf.elevated {
+                row(ui, k.ok, "Running as administrator", "This app has the rights it needs to apply or revert tweaks.", help::ID_PREFLIGHT);
+            } else {
+                row(ui, k.err, "Not running as administrator", "Apply, Revert, Temporary allow, and the OneDrive wizard need administrator rights. The app usually asks for this when it starts.", help::ID_PREFLIGHT);
+                if offer_relaunch {
+                    if ui.add(theme::primary_button("Restart as administrator")).on_hover_text("Closes this window and asks Windows for administrator permission (UAC).").clicked() {
+                        if sys::relaunch_elevated() {
+                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                    }
+                }
+            }
+
+            match pf.session_is_admin {
+                Some(true) => row(ui, k.ok, "Signed-in account is an administrator", "The person signed in to Windows can approve the UAC prompt with their own account.", help::ID_PREFLIGHT),
+                Some(false) => row(ui, k.warn, "Signed-in account is a standard user", "At the UAC prompt you will need the password of an administrator account. Per-user tweaks would then go to that administrator, not to the person sitting at the PC.", help::ID_PREFLIGHT),
+                None => row(ui, k.info, "Could not check whether the signed-in account is an administrator", "", help::ID_PREFLIGHT),
+            }
+
+            row(ui, k.info, &pf.uac_label(), sys::Preflight::uac_summary(), help::ID_PREFLIGHT);
+
+            match pf.tamper_on {
+                Some(true) => row(ui, k.info, "Microsoft Defender Tamper Protection is on", "This does not block the tweaks this app makes.", help::ID_PREFLIGHT),
+                Some(false) => row(ui, k.info, "Microsoft Defender Tamper Protection is off", "This does not affect what the app can do. The app never changes this setting.", help::ID_PREFLIGHT),
+                None => row(ui, k.info, "Microsoft Defender Tamper Protection could not be read", "Usually this just means Defender is not installed, or the value was not present.", help::ID_PREFLIGHT),
+            }
+            if pf.third_party_av.is_empty() {
+                row(ui, k.info, "No third-party antivirus detected", "Microsoft Defender is fine. A third-party product can sometimes block or quarantine this app.", help::ID_PREFLIGHT);
+            } else {
+                let names = pf.third_party_av.join(", ");
+                row(ui, k.warn, &format!("Third-party antivirus detected: {names}"), "It may block or quarantine this app or the changes it writes. Consider adding PrimeCrewTweakinator5000.exe to that product's allow list (exclusions / whitelist) before you Apply. The app never changes your antivirus settings.", help::ID_PREFLIGHT);
+            }
+
+            if let Some((me, who)) = &pf.mismatch {
+                row(ui, k.err, &format!("Running as {me}, not the signed-in user ({who})"), "Per-user tweaks (and the OneDrive wizard) would affect the elevated account, not the person sitting at the PC. The OneDrive wizard is locked. Close the app and start it again while signed in as that person, using an administrator account for them.", help::ID_PREFLIGHT);
+            } else {
+                row(ui, k.ok, "Elevated account matches the signed-in user", "Per-user tweaks will apply to the person sitting at the PC.", help::ID_PREFLIGHT);
+            }
+
+            if pf.reboot_pending.is_empty() {
+                row(ui, k.ok, "No reboot is pending", "", help::ID_PREFLIGHT);
+            } else {
+                row(ui, k.warn, "A reboot is pending", &format!("{}. Finish the reboot first, then run this app again.", pf.reboot_pending.join("; ")), help::ID_PREFLIGHT);
+            }
+
+            if pf.windows11 {
+                row(ui, k.warn, &format!("This PC is running Windows 11 (build {})", pf.build), "This toolkit is built for Windows 10. You can continue, but some settings differ, and Windows 11-only values are used only there.", help::ID_PREFLIGHT);
+            } else {
+                row(ui, k.ok, &format!("This is Windows 10 (build {})", pf.build), "This toolkit is built for Windows 10, especially 22H2.", help::ID_PREFLIGHT);
+            }
+        }
+
+
+        fn preflight_alert_count(&self) -> usize {
+            let p = &self.preflight;
+            let mut n = 0;
+            if !p.elevated { n += 1; }
+            if p.session_is_admin == Some(false) { n += 1; }
+            if p.mismatch.is_some() { n += 1; }
+            if !p.reboot_pending.is_empty() { n += 1; }
+            if p.windows11 { n += 1; }
+            if !p.third_party_av.is_empty() { n += 1; }
+            n
+        }
+
+        fn preflight_compact(&self, ui: &mut egui::Ui) {
+            let k = theme::t();
+            let p = &self.preflight;
+            let n = self.preflight_alert_count();
+            if n == 0 {
+                ui.label(RichText::new("All checks look good.").strong().color(k.ok));
+                ui.add(egui::Label::new(RichText::new("Running as administrator on Windows 10, no pending reboot. Click Apply selected… to see the full check before anything is written.").small().color(k.muted)).wrap());
+            } else {
+                ui.label(RichText::new(format!("{n} item(s) need your attention before you Apply.")).strong().color(k.warn));
+                if !p.elevated {
+                    ui.label(RichText::new("• Not running as administrator.").color(k.err));
+                    if ui.add(theme::primary_button("Restart as administrator")).clicked() {
+                        if sys::relaunch_elevated() {
+                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                    }
+                }
+                if p.session_is_admin == Some(false) {
+                    ui.add(egui::Label::new(RichText::new("• The signed-in account is a standard user. You will need an administrator password at the UAC prompt.").color(k.warn)).wrap());
+                }
+                if let Some((me, who)) = &p.mismatch {
+                    ui.add(egui::Label::new(RichText::new(format!("• Running as {me}, not the signed-in user ({who}). Per-user tweaks would go to the wrong account.")).color(k.err)).wrap());
+                }
+                if !p.reboot_pending.is_empty() {
+                    ui.add(egui::Label::new(RichText::new(format!("• A reboot is pending: {}.", p.reboot_pending.join("; "))).color(k.warn)).wrap());
+                }
+                if p.windows11 {
+                    ui.add(egui::Label::new(RichText::new(format!("• This PC is running Windows 11 (build {}). This toolkit is built for Windows 10.", p.build)).color(k.warn)).wrap());
+                }
+                if !p.third_party_av.is_empty() {
+                    ui.add(egui::Label::new(RichText::new(format!("• Third-party antivirus detected ({}). It may block or quarantine this app — consider adding it to that product's allow list.", p.third_party_av.join(", "))).color(k.warn)).wrap());
+                }
+                ui.add(egui::Label::new(RichText::new("Click Apply selected… to see the full check. Nothing is changed automatically.").small().color(k.muted)).wrap());
+            }
+        }
+
+        fn summary_window(&mut self, ctx: &egui::Context) {
+            let Some(sum) = self.summary.clone() else { return };
+            let k = theme::t();
+            let mut close = false;
+            let mut stay = true;
+            egui::Window::new(&sum.title)
+                .open(&mut stay)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .default_width(560.0)
+                .show(ctx, |ui| {
+                    if sum.errors == 0 {
+                        ui.label(RichText::new("Everything worked.").heading().strong().color(k.ok));
+                    } else {
+                        ui.label(RichText::new(format!("{} real problem(s) need your attention.", sum.errors)).heading().strong().color(k.err));
+                    }
+                    ui.add_space(8.0);
+                    ui.label(RichText::new(format!("{} changes made", sum.set)).color(k.ok));
+                    ui.label(RichText::new(format!("{} already done (skipped)", sum.skip)).color(k.muted));
+                    ui.label(RichText::new(format!("{} real problem{}", sum.errors, if sum.errors == 1 { "" } else { "s" })).color(if sum.errors == 0 { k.ok } else { k.err }));
+                    if !sum.problems.is_empty() {
+                        ui.add_space(6.0);
+                        ui.label(RichText::new("What went wrong").strong());
+                        egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                            for (tech, plain) in &sum.problems {
+                                ui.add(egui::Label::new(RichText::new(format!("• {plain}")).color(k.err)).wrap());
+                                if self.prefs.expert {
+                                    ui.add(egui::Label::new(RichText::new(tech).small().monospace().color(k.muted)).wrap());
+                                }
+                            }
+                        });
+                    }
+                    ui.add_space(8.0);
+                    ui.add(egui::Label::new(RichText::new("Next: reboot this PC, then click Verify (read-only) to confirm everything stuck.").color(k.info)).wrap());
+                    help::link(ui, help::ID_LOG_GUIDE);
+                    ui.add_space(10.0);
+                    if ui.add(theme::primary_button("Close")).clicked() {
+                        close = true;
+                    }
+                });
+            if close || !stay {
+                self.summary = None;
+            }
         }
 
         fn confirm_window(&mut self, ctx: &egui::Context) {
@@ -522,17 +739,27 @@ mod gui {
                 .collapsible(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .default_width(720.0)
+                .default_width(760.0)
                 .show(ctx, |ui| {
+                    let mut ok = true;
+                    egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| {
+                    if is_apply {
+                        ui.label(RichText::new("Pre-flight check (read-only — nothing here is changed)").strong());
+                        help::link(ui, help::ID_PREFLIGHT);
+                        ui.add_space(4.0);
+                        theme::card(ui, "This PC", |ui| {
+                            self.preflight_rows(ui, true);
+                        });
+                        ui.add_space(8.0);
+                    }
                     ui.label(if is_apply { "These changes will be made (each one is logged old → new):" } else { "These tweaks will be reverted to recorded originals (or Windows defaults):" });
                     theme::card(ui, "", |ui| {
-                        egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                        egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
                             for l in Self::describe(&cats, self.opts) {
                                 ui.add(egui::Label::new(RichText::new(l).monospace()).wrap());
                             }
                         });
                     });
-                    let mut ok = true;
                     if is_apply {
                         ui.label(RichText::new(if self.opts.restore_point { "✔ A System Restore point is created first." } else { "No restore point will be created (checkbox is off)." }).color(if self.opts.restore_point { k.ok } else { k.warn }));
                         if cats.contains(&Cat::Updates) {
@@ -545,12 +772,13 @@ mod gui {
                             ok &= self.ack_all;
                         }
                     }
+                    });
                     ui.add_space(6.0);
                     ui.horizontal_wrapped(|ui| {
                         let b = if is_apply { theme::primary_button("Confirm apply") } else {
                             egui::Button::new(RichText::new("Confirm revert").strong().color(k.err)).stroke(egui::Stroke::new(1.5_f32, k.err)).min_size(egui::vec2(160.0_f32, 30.0_f32))
                         };
-                        if ui.add_enabled(ok, b).clicked() {
+                        if ui.add_enabled(ok && self.admin, b).on_hover_text(if self.admin { "Apply these changes" } else { "Restart as administrator first (see the pre-flight check above)" }).clicked() {
                             go = true;
                         }
                         if ui.add(egui::Button::new("Cancel").min_size(egui::vec2(90.0, 30.0))).clicked() {
@@ -695,12 +923,16 @@ mod gui {
                     ui.horizontal_wrapped(|ui| {
                         ui.label(RichText::new("Log").strong().size(14.5));
                         ui.label(RichText::new("every key / service / task touched: old → new").color(k.muted));
+                        help::link(ui, help::ID_LOG_GUIDE);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.add_enabled(!busy, egui::Button::new("Clear")).clicked() {
                                 self.log.clear();
                             }
                             if ui.button("Copy").clicked() {
-                                let t: String = self.log.iter().map(|(l, s)| format!("[{}] {}\n", l.tag(), s)).collect();
+                                let t: String = self.log.iter().map(|(l, s, d)| match d {
+                                    Some(det) => format!("[{}] {} ({})\n", l.tag(), s, det),
+                                    None => format!("[{}] {}\n", l.tag(), s),
+                                }).collect();
                                 ui.ctx().copy_text(t);
                             }
                             if ui.button("Open logs folder").clicked() {
@@ -719,6 +951,10 @@ mod gui {
                             self.set_prefs(ui.ctx(), p);
                         });
                     });
+                    if !self.prefs.expert {
+                        ui.add(egui::Label::new(RichText::new(LOG_LEGEND).small().color(k.muted)).wrap());
+                    }
+                    let expert = self.prefs.expert;
                     egui::Frame::new()
                         .fill(k.log_fill)
                         .stroke(egui::Stroke::new(1.0_f32, k.card_stroke))
@@ -726,8 +962,15 @@ mod gui {
                         .inner_margin(egui::Margin::same(8))
                         .show(ui, |ui| {
                             egui::ScrollArea::both().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
-                                for (l, s) in &self.log {
-                                    ui.label(RichText::new(format!("[{:<5}] {}", l.tag(), s)).monospace().color(lvl_color(*l)));
+                                for (l, s, d) in &self.log {
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.label(RichText::new(format!("[{:<5}] {}", l.tag(), s)).monospace().color(lvl_color(*l)));
+                                        if expert {
+                                            if let Some(det) = d {
+                                                ui.label(RichText::new(det).monospace().color(k.muted));
+                                            }
+                                        }
+                                    });
                                 }
                             });
                         });
@@ -811,13 +1054,27 @@ mod gui {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.add_space(6.0);
                     let sel = self.selected();
+                    theme::card(ui, "This PC (pre-flight, read-only)", |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.add(egui::Label::new(RichText::new("A quick look at this computer before you Apply. Nothing here is changed.").color(k.muted)).wrap());
+                            help::mark(ui, "Read-only checks: administrator, UAC, antivirus, the signed-in account, a pending reboot, and the Windows version. The full list appears when you click Apply.", help::ID_PREFLIGHT, expert);
+                            help::link(ui, help::ID_PREFLIGHT);
+                            if ui.small_button("Refresh").on_hover_text("Read the checks again. Does not change any settings.").clicked() {
+                                self.refresh_preflight();
+                            }
+                        });
+                        ui.add_space(4.0);
+                        self.preflight_compact(ui);
+                    });
                     theme::card(ui, "Actions", |ui| {
                         ui.horizontal_wrapped(|ui| {
-                            if ui.add_enabled(can_change && !sel.is_empty(), theme::primary_button("Apply selected…")).on_hover_text("Review the exact changes, then confirm").clicked() {
+                            if ui.add_enabled(!busy && self.confirm.is_none() && !sel.is_empty(), theme::primary_button("Apply selected…")).on_hover_text("Review the exact changes and a pre-flight check, then confirm").clicked() {
+                                self.refresh_preflight();
                                 self.confirm = Some(Pending::Apply { cats: sel.clone(), all: false });
                             }
                             help::mark(ui, "Shows a list of the exact changes and asks you to confirm before anything is written.", help::ID_ACTIONS, expert);
-                            if ui.add_enabled(can_change, egui::Button::new("Apply all…").min_size(egui::vec2(120.0, 32.0))).clicked() {
+                            if ui.add_enabled(!busy && self.confirm.is_none(), egui::Button::new("Apply all…").min_size(egui::vec2(120.0, 32.0))).clicked() {
+                                self.refresh_preflight();
                                 self.confirm = Some(Pending::Apply { cats: Cat::ALL.to_vec(), all: true });
                             }
                             if ui.add_enabled(!busy, egui::Button::new(RichText::new("Verify (read-only)").color(k.info)).min_size(egui::vec2(140.0, 32.0))).on_hover_text("PASS / FAIL / WARN for every setting. Changes nothing.").clicked() {
@@ -920,6 +1177,7 @@ mod gui {
             self.od_after_job(ctx);
             self.od_window(ctx);
             self.confirm_window(ctx);
+            self.summary_window(ctx);
             help::show_window(ctx, &mut self.help_open, &mut self.help_topic);
             help::show_about(ctx, &self.icon, &mut self.about_open);
             self.draw_shot_tip(ctx);

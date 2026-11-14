@@ -6,12 +6,12 @@ PrimeCrew Tweakinator 5000 is a small Windows 10 utility from **PrimeCrew Softwa
 
 ## Download
 
-Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.3.0**.
+Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.4.0**.
 
-- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.3.0/PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe)  
+- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.4.0-x64-Setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.4.0/PrimeCrewTweakinator5000-v1.4.0-x64-Setup.exe)  
   A normal setup. It adds a Start menu entry under PrimeCrew Software and appears in Add/Remove Programs.
 
-- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.3.0.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.3.0/PrimeCrewTweakinator5000-v1.3.0.zip)**  
+- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.4.0.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.4.0/PrimeCrewTweakinator5000-v1.4.0.zip)**  
   Unzip anywhere, run `PrimeCrewTweakinator5000.exe`. Nothing gets installed, and you can run it from a USB stick.
 
 **Requirements:** Windows 10 64-bit (aimed at Pro 22H2). The app asks for administrator permission (a UAC prompt) when you run it. The GUI needs a GPU/driver with OpenGL 2+ (normal on real hardware; may fail in a bare VM or some RDP sessions). No extra runtime. The app contains no network code and sends no telemetry.
@@ -103,11 +103,19 @@ A classic menu bar sits across the top:
 - **Options** — Expert mode (off by default, saved in `ui.json`). Apply-time checkboxes (restore point, policy only, keep Microsoft 365, cleanup override) stay in the Apply options card.
 - **Help** — Help contents (F1), and **About PrimeCrew Tweakinator 5000…**
 
-The Help window is resizable, with a topic list on the left and readable text on the right. It covers getting started, every tweak (what it changes, why you might want it, risks, and how to undo it — registry lists are generated from the same catalog the app uses), Temporary allow, the OneDrive wizard step by step, themes, the PowerShell fallback, logs, uninstalling, and known limits. A small “Help” link on each tweak and in the wizard opens the matching topic.
+The Help window is resizable, with a topic list on the left and readable text on the right. It covers getting started, the pre-flight check, every tweak (what it changes, why you might want it, risks, and how to undo it — registry lists are generated from the same catalog the app uses), Temporary allow, the OneDrive wizard step by step, themes, the PowerShell fallback, how to read the log, logs and saved state, uninstalling, and known limits. A small “Help” link on each tweak and in the wizard opens the matching topic.
 
 Circled question marks (a “?” inside a circle, not a “(?)” label) sit next to settings, actions and wizard steps. Hover for a short explanation; click to open that Help topic. They are shown in Beginner mode and, more quietly, in Expert mode.
 
-The About popup (Help menu only) shows the app icon, the name, the version from the package metadata, “by PrimeCrew Software”, a one-line description, and an MIT license note. About is no longer listed under Options.
+The About popup (Help menu only) shows the app icon, the name, the version from the package metadata, “by PrimeCrew Software”, a one-line description, and “Free for personal use. Use at your own risk — read Help ▸ Known limits,” plus an MIT license note. The repository includes an MIT LICENSE file (copyright PrimeCrew Software). About is no longer listed under Options.
+
+### Pre-flight check, Apply summary, and friendlier logs
+
+Before Apply writes anything, a read-only **pre-flight check** reports (in plain language, with a Help link for each item): whether the app is elevated (with a **Restart as administrator** button if it is not), whether the signed-in account is an administrator, the UAC level (info only — the app never changes UAC), Microsoft Defender Tamper Protection (info; it does not block these tweaks), any third-party antivirus (which may block or quarantine the app — a whitelist tip is shown), a mismatch between the elevated and signed-in accounts, a pending reboot, and whether this is Windows 10 or 11. The same checklist sits on the main window under **This PC**. Nothing in the check is changed automatically.
+
+After Apply, Beginner mode shows a **summary** with counts of changes made, already done (skipped), and real problems, plus next steps (reboot, then Verify). If there were no real problems, it says “Everything worked.” Each real error gets a one-line explanation.
+
+The log has a Beginner-mode legend: “'Access denied' followed by SET means Windows resisted and the app handled it. Only red ERROR lines need attention.” Lines where Windows protects a task or the WaaSMedic service use plain wording; the raw text is kept in the log file and, in Expert mode, on screen in a quieter style. A leftover Store app version that is already gone, a News and interests value that Windows locks, and Windows 11-only widget values on Windows 10 are no longer reported as errors, and Verify does not fail on them.
 
 ### Themes
 
@@ -120,7 +128,7 @@ The same tweaks as scripts in this folder (`Apply-All-Tweaks.ps1` / `.cmd`, `Ver
 ## Safety notes and known limits
 
 - Windows 10 is past end of support (October 14, 2025). Blocking Windows Update also blocks security and consumer-ESU patches (ESU runs through October 12, 2027), which leaves the PC exposed to unpatched vulnerabilities. Applying the Updates kill requires an explicit "I understand" tick; Apply all needs a second tick.
-- **This toolkit has not been tested on a real Windows PC yet.** Try Verify after Apply, and keep the default restore-point option on.
+- After Apply, click Verify, and keep the default restore-point option on.
 - A manual MSU or a repair install / in-place upgrade can undo the Updates kill (it rewrites services, tasks and the WaaSMedicSvc key ACL). The SYSTEM-deny ACE on that key can also make a manual cumulative update fail — **Revert the Updates tweak before installing updates by hand**, then re-apply if you still want the kill. Run Verify after any manual update.
 - Run the app (or scripts) as the account that uses the PC: HKCU values go to the account that elevates. If you elevate with a different admin account, the header shows a red "RUNNING AS … NOT …" warning and the OneDrive wizard is locked.
 - Revert cannot reinstall removed Appx packages (use the Store, after Temporary allow if the kill is on). Cleanup cannot be meaningfully reverted (deleted cache files stay deleted).
@@ -220,8 +228,8 @@ Output: `app/target/x86_64-pc-windows-gnullvm/release/PrimeCrewTweakinator5000.e
 Release artifacts:
 
 ```
-PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe
-PrimeCrewTweakinator5000-v1.3.0.zip
+PrimeCrewTweakinator5000-v1.4.0-x64-Setup.exe
+PrimeCrewTweakinator5000-v1.4.0.zip
   PrimeCrewTweakinator5000/PrimeCrewTweakinator5000.exe
   PrimeCrewTweakinator5000/README.md
 ```

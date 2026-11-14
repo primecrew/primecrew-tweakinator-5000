@@ -326,6 +326,156 @@ pub fn os_summary() -> String {
     )
 }
 
+/// CurrentBuild from the Windows NT key (19045 = 22H2, 22000+ = Windows 11).
+pub fn os_build() -> u32 {
+    let p = r"HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+    reg_get(p, "CurrentBuild").as_text().and_then(|s| s.parse().ok()).unwrap_or(0)
+}
+
+pub fn os_product_name() -> String {
+    let p = r"HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+    reg_get(p, "ProductName").as_text().unwrap_or_default()
+}
+
+pub fn is_windows_11() -> bool {
+    os_build() >= crate::catalog::WIN11_BUILD || os_product_name().to_ascii_lowercase().contains("windows 11")
+}
+
+/// Reasons a reboot appears to be pending (empty = none). Read-only.
+pub fn reboot_pending_reasons() -> Vec<String> {
+    let mut v = vec![];
+    if key_exists(r"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") {
+        v.push("Windows Update reports a reboot is required".into());
+    }
+    if key_exists(r"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") {
+        v.push("Component servicing reports a reboot is pending".into());
+    }
+    if key_exists(r"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\PostRebootReporting") {
+        v.push("Windows Update is waiting to report after a reboot".into());
+    }
+    match reg_get(r"HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager", "PendingFileRenameOperations") {
+        Cur::Absent => {}
+        Cur::S(s) if s.trim().is_empty() => {}
+        Cur::Other(_) | Cur::S(_) | Cur::D(_) => v.push("Windows has file renames waiting for a reboot".into()),
+    }
+    v
+}
+
+/// Whether the signed-in session account is in the local Administrators group.
+pub fn session_user_is_admin() -> Option<bool> {
+    if user_mismatch().is_none() {
+        return Some(is_admin());
+    }
+    let sess = session_user()?;
+    let short = sess.rsplit_once('\\').map(|(_, u)| u).unwrap_or(&sess);
+    let (_, out) = run("net.exe", &["localgroup", "Administrators"]);
+    if out.trim().is_empty() {
+        return None;
+    }
+    let full = sess.to_ascii_lowercase();
+    let short = short.to_ascii_lowercase();
+    Some(out.lines().any(|l| {
+        let t = l.trim().to_ascii_lowercase();
+        !t.is_empty()
+            && !t.starts_with("alias")
+            && !t.starts_with("comment")
+            && !t.starts_with("members")
+            && !t.starts_with("the command")
+            && !t.starts_with("---")
+            && (t == full || t == short || t.ends_with(&format!("\\{short}")))
+    }))
+}
+
+fn dword_at(path: &str, name: &str) -> Option<u32> {
+    match reg_get(path, name) {
+        Cur::D(v) => Some(v),
+        _ => None,
+    }
+}
+
+/// Third-party antivirus display names from Security Center (excludes Microsoft Defender).
+pub fn third_party_antivirus() -> Vec<String> {
+    let (_, out) = ps(
+        "Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue | ForEach-Object { $_.displayName }",
+    );
+    out.lines()
+        .map(|l| l.trim().to_string())
+        .filter(|n| {
+            if n.is_empty() {
+                return false;
+            }
+            let l = n.to_ascii_lowercase();
+            !l.contains("windows defender") && !l.contains("microsoft defender")
+        })
+        .collect()
+}
+
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub struct Preflight {
+    pub elevated: bool,
+    pub process_user: String,
+    pub session_user: Option<String>,
+    pub session_is_admin: Option<bool>,
+    pub mismatch: Option<(String, String)>,
+    pub enable_lua: Option<u32>,
+    pub consent_admin: Option<u32>,
+    pub tamper_on: Option<bool>,
+    pub third_party_av: Vec<String>,
+    pub reboot_pending: Vec<String>,
+    pub build: u32,
+    pub product_name: String,
+    pub windows11: bool,
+}
+
+impl Preflight {
+    pub fn uac_summary() -> &'static str {
+        "The UAC level does not change what this app can do once it is running as administrator. This app never changes UAC settings."
+    }
+
+    pub fn uac_label(&self) -> String {
+        if self.enable_lua == Some(0) {
+            return "User Account Control is off".into();
+        }
+        let consent = match self.consent_admin {
+            Some(0) => "Elevate without prompting",
+            Some(1) => "Prompt for credentials on the secure desktop",
+            Some(2) => "Prompt for consent on the secure desktop",
+            Some(3) => "Prompt for credentials",
+            Some(4) => "Prompt for consent",
+            Some(5) => "Prompt for consent for non-Windows programs (Windows default)",
+            Some(n) => return format!("UAC is on (ConsentPromptBehaviorAdmin = {n})"),
+            None => return if self.enable_lua.is_none() && self.consent_admin.is_none() {
+                "UAC level could not be read".into()
+            } else {
+                "UAC is on".into()
+            },
+        };
+        format!("UAC is on — {consent}")
+    }
+}
+
+/// Read-only snapshot of this PC, used by the pre-flight check. Changes nothing.
+pub fn preflight() -> Preflight {
+    const UAC: &str = r"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System";
+    const TAMPER: &str = r"HKLM:\SOFTWARE\Microsoft\Windows Defender\Features";
+    Preflight {
+        elevated: is_admin(),
+        process_user: process_user(),
+        session_user: session_user(),
+        session_is_admin: session_user_is_admin(),
+        mismatch: user_mismatch(),
+        enable_lua: dword_at(UAC, "EnableLUA"),
+        consent_admin: dword_at(UAC, "ConsentPromptBehaviorAdmin"),
+        tamper_on: dword_at(TAMPER, "TamperProtection").map(|v| v == 5),
+        third_party_av: third_party_antivirus(),
+        reboot_pending: reboot_pending_reasons(),
+        build: os_build(),
+        product_name: os_product_name(),
+        windows11: is_windows_11(),
+    }
+}
+
 // ---------------- registry key security (service keys only) ----------------
 // Used ONLY for HKLM\SYSTEM\CurrentControlSet\Services\<update service>. Never for files or binaries.
 mod sec {

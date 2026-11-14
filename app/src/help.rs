@@ -1,6 +1,6 @@
 //! In-app Help: topic list, beginner-friendly articles (catalog-driven for tweaks),
 //! circled-? marks, and the About popup.
-use crate::catalog::{Cat, Level, REG, DEAD_WSUS, FW_PREFIX, FW_SERVICES, GODMODE_NAME, SECURITY_NOTE, TEMP_LIFT_REG, TEMP_LIFT_SERVICES};
+use crate::catalog::{Cat, Level, REG, DEAD_WSUS, FW_PREFIX, FW_SERVICES, GODMODE_NAME, SECURITY_NOTE, TEMP_LIFT_REG, TEMP_LIFT_SERVICES, WIN11_BUILD};
 use crate::theme;
 use eframe::egui::{self, RichText};
 use std::cell::Cell;
@@ -39,6 +39,8 @@ pub const ID_LOGS: &str = "logs";
 pub const ID_UNINSTALL: &str = "uninstall";
 pub const ID_LIMITS: &str = "limits";
 pub const ID_OPTIONS: &str = "options";
+pub const ID_LOG_GUIDE: &str = "understanding-the-log";
+pub const ID_PREFLIGHT: &str = "preflight";
 
 pub fn id_for(c: Cat) -> &'static str {
     match c {
@@ -78,6 +80,7 @@ const TOPICS: &[Topic] = &[
     Topic { id: ID_START, title: "Getting started", prose: START, cat: None },
     Topic { id: ID_EXPERT, title: "Beginner and Expert mode", prose: EXPERT, cat: None },
     Topic { id: ID_ACTIONS, title: "Apply, Verify and Revert", prose: ACTIONS, cat: None },
+    Topic { id: ID_PREFLIGHT, title: "Pre-flight check", prose: PREFLIGHT, cat: None },
     Topic { id: ID_OPTIONS, title: "Apply options", prose: OPTIONS, cat: None },
     Topic { id: ID_CLEANUP, title: "SoftwareDistribution cleanup", prose: CLEANUP, cat: Some(Cat::Cleanup) },
     Topic { id: ID_UPDATES, title: "Hard Windows Update kill", prose: UPDATES, cat: Some(Cat::Updates) },
@@ -93,6 +96,7 @@ const TOPICS: &[Topic] = &[
     Topic { id: ID_OD_REMOVE, title: "OneDrive: remove and undo", prose: OD_REMOVE, cat: Some(Cat::OneDrive) },
     Topic { id: ID_THEMES, title: "Themes and text size", prose: THEMES, cat: None },
     Topic { id: ID_PS, title: "PowerShell fallback", prose: POWERSHELL, cat: None },
+    Topic { id: ID_LOG_GUIDE, title: "Understanding the log", prose: LOG_GUIDE, cat: None },
     Topic { id: ID_LOGS, title: "Logs and saved state", prose: LOGS, cat: None },
     Topic { id: ID_UNINSTALL, title: "Uninstalling the app", prose: UNINSTALL, cat: None },
     Topic { id: ID_LIMITS, title: "Known limits and safety", prose: LIMITS, cat: None },
@@ -117,7 +121,14 @@ fn registry_lines(cat: Cat) -> String {
     }
     let mut s = String::from("\n\nThese registry values are set (this list comes from the same catalog the app uses, so it stays in sync):\n");
     for i in items {
-        s.push_str(&format!("\n• {}\\{} = {} ({}, {})", i.path, i.name, i.val.text(), i.val.kind(), level_plain(i.level)));
+        let mut extra = level_plain(i.level).to_string();
+        if i.min_build >= WIN11_BUILD {
+            extra.push_str(", Windows 11 only");
+        }
+        if i.covered_by.is_some() {
+            extra.push_str(", Windows may lock this value — the matching policy is what counts");
+        }
+        s.push_str(&format!("\n• {}\\{} = {} ({}, {})", i.path, i.name, i.val.text(), i.val.kind(), extra));
     }
     s
 }
@@ -253,7 +264,7 @@ pub fn show_about(ctx: &egui::Context, icon: &egui::TextureHandle, open: &mut bo
                 ui.add_space(8.0);
                 ui.add(egui::Label::new("A conservative Windows 10 tweak toolkit: nothing is applied silently, and every change can be verified or reverted.").wrap());
                 ui.add_space(6.0);
-                ui.label(RichText::new("Private build for trusted friends. Licensed under MIT.").small().color(k.muted));
+                ui.add(egui::Label::new(RichText::new("Free for personal use. Use at your own risk — read Help ▸ Known limits. Licensed under MIT.").small().color(k.muted)).wrap());
                 ui.add_space(12.0);
                 if ui.add(theme::primary_button("Close")).clicked() {
                     close = true;
@@ -284,7 +295,9 @@ A typical first use:
 2. Tick only the tweaks you actually want. SoftwareDistribution cleanup is off by default — leave it off unless you know you need it.
 3. Leave “Create System Restore point before Apply” ticked.
 4. Click Apply selected…, read the list, and confirm. If you chose the Windows Update kill, you must also tick that you understand security patches will be blocked.
-5. Click Verify (read-only) and read the log. PASS is good. FAIL means something did not stick. WARN is often expected on Windows 10 Pro for a few policies.
+5. Before anything is written, Apply shows a pre-flight check of this PC (administrator, UAC, antivirus, a pending reboot, and whether this is Windows 10). It only reports; it never changes those settings.
+6. After Apply, a short summary tells you how many changes were made, how many were already done, and whether anything actually failed. If there were no real problems, it says “Everything worked.” Reboot, then click Verify.
+7. Click Verify (read-only) and read the log. PASS is good. FAIL means something did not stick. WARN is often expected on Windows 10 Pro for a few policies. In the log, a line that mentions “Access denied” and is tagged SET is normal — Windows resisted and the app handled it. Only red ERROR lines need attention.
 
 Circled question marks next to settings show a short explanation when you hover them. Click a mark, or a Help link, to open the matching topic here. Press F1 any time to open this Help window.
 
@@ -307,7 +320,8 @@ const ACTIONS: &str = "\
 Apply, Verify and Revert are the three main actions. They only touch the tweaks you have ticked, except for “Apply all” / “Revert all”.
 
 Apply
-• Shows a confirmation window that lists every change that will be made (registry values, plus extra steps such as services or tasks).
+• Shows a confirmation window with a read-only pre-flight check of this PC, then a list of every change that will be made (registry values, plus extra steps such as services or tasks).
+• When Apply finishes, Beginner mode shows a summary: changes made, already done, and real problems, plus what to do next (reboot, then Verify). If there were no real problems, it says “Everything worked.”
 • By default a System Restore point is created first. If that box is ticked and the restore point cannot be created, Apply stops and nothing else is written.
 • The Windows Update kill also requires an “I understand” tick, because it blocks security and ESU patches.
 • Apply all lists every tweak (except the OneDrive wizard, which is never part of Apply all) and needs a second confirmation tick.
@@ -480,7 +494,7 @@ This tweak turns off Windows Spotlight on the lock screen, suggestion tips, the 
 What it changes
 • Per-user Content Delivery Manager values that control rotating lock-screen pictures, fun facts, and suggested apps and tips.
 • CloudContent policies for Spotlight and consumer features. Microsoft scopes several of these to Enterprise and Education. On Windows 10 Pro the Content Delivery Manager values do the real work, and Verify may report WARN on those CloudContent policies — that is expected.
-• Policies and settings for news and interests, widgets (including the taskbar widgets button), and search highlights.
+• Policies and settings for news and interests, widgets (including the taskbar widgets button), and search highlights. The Windows 11-only widgets values (the taskbar widgets button and widgets on the lock screen) are skipped on Windows 10, with no error. News and interests is turned off by a policy; a related per-user taskbar value is often locked by Windows and is not treated as a failure.
 
 Risks
 • The lock screen will no longer show Spotlight pictures and tips. The news/widgets flyout and the widgets button are turned off.
@@ -621,6 +635,8 @@ The PowerShell kit and the GUI share the same state.json format and the same set
 const LOGS: &str = "\
 Everything the app writes is logged, and a small amount of state is saved so Revert and the wizard can undo their work.
 
+In Beginner mode a short legend sits at the top of the on-screen log: “'Access denied' followed by SET means Windows resisted and the app handled it. Only red ERROR lines need attention.” See “Understanding the log” for a fuller explanation.
+
 Locations (all under C:\\ProgramData\\Win10Tweaks\\)
 • Logs\\ — one log file per Apply, Verify, Revert, Temporary allow, and wizard job. File ▸ Open logs folder (or the button on the log panel) opens this folder. You can also Copy or Clear the on-screen log; that does not delete the files.
 • state.json — recorded originals and other undo information. Shared with the PowerShell kit.
@@ -651,7 +667,7 @@ Please read these before you rely on the hard update kill or share the app.
 
 • {SECURITY_NOTE} Applying the Updates kill requires an explicit “I understand” tick.
 
-• This toolkit has not been tested on a real Windows PC yet. After Apply, click Verify, and keep the default restore-point option on.
+• After Apply, click Verify, and keep the default restore-point option on.
 
 • The exe is unsigned, so SmartScreen may say “unknown publisher”. Use More info ▸ Run anyway only if you trust the copy you were given.
 
@@ -663,3 +679,57 @@ Please read these before you rely on the hard update kill or share the app.
 
 • Temporary allow is the supported way to update Store apps while the kill is in place. Click Restore update kill when you are done, and before uninstalling if a timer is still running.
 ";
+
+const PREFLIGHT: &str = "\
+Before Apply writes anything, the confirmation window shows a read-only pre-flight check of this PC. The same checklist also appears on the main window, under This PC. Nothing in this check changes Windows settings. This app never changes User Account Control.
+
+What it looks at
+
+Administrator rights
+• Is this app running as administrator? Apply, Revert, Temporary allow, and the OneDrive wizard need that. If it is not elevated, use Restart as administrator — Windows will show a UAC prompt. The app already asks for administrator rights when it starts; this button is a fallback if that did not happen.
+• Is the person signed in to Windows an administrator? If that account is a standard user, the UAC prompt will ask for an administrator’s password. Per-user tweaks would then go to that administrator’s account, not to the person sitting at the PC.
+
+User Account Control (info only)
+• The app reports the current UAC level (for example, the default “prompt for consent for non-Windows programs”). The UAC level does not change what this app can do once it is already running as administrator. The app never turns UAC up or down.
+
+Antivirus
+• Microsoft Defender Tamper Protection, if it is on, does not block the tweaks this app makes. That is just information.
+• A third-party antivirus can sometimes block or quarantine this app or the changes it writes. If one is detected, consider adding PrimeCrewTweakinator5000.exe to that product’s allow list (sometimes called exclusions or whitelist) before you Apply. The app never changes your antivirus settings.
+
+Wrong Windows account
+• If the elevated account is not the person signed in to Windows, per-user tweaks (HKCU, the Desktop, and the OneDrive wizard) would affect the wrong profile. The OneDrive wizard stays locked in that case. Close the app and start it again while signed in as that person, with an administrator account for them.
+
+Pending reboot
+• If Windows is waiting for a reboot (for example after an update), finish that reboot first. A pending reboot can make service and file changes fail, and SoftwareDistribution cleanup will refuse to run unless you override it.
+
+Windows version
+• This toolkit is built for Windows 10. If it is running on Windows 11, you will see a warning. You can still continue, but some settings differ, and Windows 11-only values are used only there.
+
+Every item has a Help link. If something in the list looks wrong, read the matching topic and fix it yourself — the check will not change it for you.
+";
+
+const LOG_GUIDE: &str = "\
+The log records every change as old → new. Colours and tags tell you what happened.
+
+Tags
+• SET (green) — a change was made, or Windows refused at first and the app still completed the change another way.
+• SKIP (grey) — already the way it should be, not present, or not applicable on this PC (for example a Windows 11-only setting on Windows 10).
+• INFO (blue) — context, not a problem.
+• WARN (amber) — worth reading, but not a failed change. A few policies only apply on Enterprise / Education, so WARN can be expected on Windows 10 Pro.
+• ERROR or FAIL (red) — something that should have worked did not. These are the lines that need your attention.
+
+“Access denied” is often normal
+Windows protects some update tasks and the WaaSMedic service. The app is designed to handle that:
+• A task line that says it was disabled because Windows protects the task (using the built-in SYSTEM helper) is a successful SET, not a failure.
+• A service line that says it was set via the registry because Windows protects the service is also a successful SET. That one takes effect after a reboot.
+• If you still see the raw “Access is denied” text, it is extra technical detail (always in the log file; in Expert mode it is also shown on screen, quieter).
+
+The same is true for a leftover Store app entry that is already gone (SKIP: old leftover entry, nothing to remove), and for a News and interests setting that Windows locks (SKIP: the policy already turns it off).
+
+In Beginner mode a short legend sits at the top of the log: “'Access denied' followed by SET means Windows resisted and the app handled it. Only red ERROR lines need attention.”
+
+When Apply finishes, Beginner mode also shows a summary with counts of changes made, already done, and real problems. If the real-problem count is 0, it says “Everything worked.” For any real error it gives a one-line explanation. Reboot, then click Verify.
+
+Log files live in C:\\ProgramData\\Win10Tweaks\\Logs. File ▸ Open logs folder opens that folder. The on-screen Copy button copies what you see (in Expert mode that includes the technical detail).
+";
+
