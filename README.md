@@ -1,16 +1,26 @@
 # PrimeCrew Tweakinator 5000
 
-Portable Windows 10 tweak toolkit from PrimeCrew Software. A full x64 installer and a portable unsigned exe, plus a PowerShell fallback kit for the same settings. Shared with trusted friends, so every change is conservative: nothing is applied silently, Apply needs an explicit confirm, and **Verify** and **Revert** are first-class actions.
+PrimeCrew Tweakinator 5000 is a small Windows 10 utility from **PrimeCrew Software**. It lets you apply a handful of conservative tweaks — nothing changes until you confirm, and you can **Verify** or **Revert** anytime.
 
-**Version:** 1.3.0 (shown in the window title, the header, Help › About, and the exe version info). Every release ships both `PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe` and `PrimeCrewTweakinator5000-v1.3.0.zip`.
+![PrimeCrew Tweakinator 5000, with the menu bar and circled question-mark tips](docs/screenshots/01-main-menu-bar.png)
 
-**Requirements:** Windows 10 64-bit (aimed at Pro 22H2). The GUI needs a GPU/driver with OpenGL 2+ (normal on real hardware; may fail in a bare VM or some RDP sessions). No extra runtime. The app contains no network code and sends no telemetry.
+## Download
 
-**Installer (recommended):** run `PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe`. It is 64-bit only and requires administrator rights. The app is installed to `C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\`, a shortcut is added under the **PrimeCrew Software** Start menu folder (the same kind of grouping Adobe apps use under Adobe), and an Add/Remove Programs entry is registered with Publisher **PrimeCrew Software**, DisplayVersion 1.3.0, the app icon, and a working uninstaller. An upgrade removes previous shortcuts first so they do not duplicate.
+Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.3.0**.
 
-**Portable:** unzip `PrimeCrewTweakinator5000-v1.3.0.zip` and run `PrimeCrewTweakinator5000.exe` from any folder (for example `C:\Apps\PrimeCrewTweakinator5000\`).
+- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.3.0/PrimeCrewTweakinator5000-v1.3.0-x64-Setup.exe)  
+  A normal setup. It adds a Start menu entry under PrimeCrew Software and appears in Add/Remove Programs.
 
-Double-click shows a UAC prompt (`requireAdministrator`). If the manifest is stripped, it falls back to a `runas` relaunch. SmartScreen may say "unknown publisher" (More info → Run anyway).
+- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.3.0.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.3.0/PrimeCrewTweakinator5000-v1.3.0.zip)**  
+  Unzip anywhere, run `PrimeCrewTweakinator5000.exe`. Nothing gets installed, and you can run it from a USB stick.
+
+**Requirements:** Windows 10 64-bit (aimed at Pro 22H2). The app asks for administrator permission (a UAC prompt) when you run it. The GUI needs a GPU/driver with OpenGL 2+ (normal on real hardware; may fail in a bare VM or some RDP sessions). No extra runtime. The app contains no network code and sends no telemetry.
+
+The exe is unsigned, so Windows SmartScreen may say “Windows protected your PC.” Click **More info**, then **Run anyway**.
+
+**Installer details:** the setup is 64-bit only. The app is installed to `C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\`. An upgrade removes previous shortcuts first so they do not duplicate.
+
+**Portable details:** unzip and run `PrimeCrewTweakinator5000.exe` from any folder (for example `C:\Apps\PrimeCrewTweakinator5000\` or a USB stick).
 
 **Uninstall:** use Add/Remove Programs or `uninstall.exe` in the install folder. Uninstalling removes the app, its Start menu shortcut, and the Add/Remove Programs entry. It does **not** revert any tweaks you applied, and it does **not** delete logs, recorded originals, or backups under `C:\ProgramData\Win10Tweaks`. Revert stays an in-app action: if you want your previous Windows settings back, run the app and click **Revert** before uninstalling. The uninstaller also shows this note. The **PrimeCrew Software** Start menu folder is removed only if it is empty. The parent `C:\Program Files\PrimeCrew Software` folder is left in place if other PrimeCrew Software apps are installed there.
 
@@ -97,7 +107,7 @@ The Help window is resizable, with a topic list on the left and readable text on
 
 Circled question marks (a “?” inside a circle, not a “(?)” label) sit next to settings, actions and wizard steps. Hover for a short explanation; click to open that Help topic. They are shown in Beginner mode and, more quietly, in Expert mode.
 
-The About popup (Help menu only) shows the app icon, the name, the version from the package metadata, “by PrimeCrew Software”, a one-line description, and a private-build / MIT note. About is no longer listed under Options.
+The About popup (Help menu only) shows the app icon, the name, the version from the package metadata, “by PrimeCrew Software”, a one-line description, and an MIT license note. About is no longer listed under Options.
 
 ### Themes
 

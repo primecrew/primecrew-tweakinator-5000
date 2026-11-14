@@ -20,7 +20,7 @@ User-facing history for PrimeCrew Tweakinator 5000.
 ## 1.1.0
 
 - Version numbers in the app (window title, header, and Options › About), in the exe version info (`FileVersion` / `ProductVersion`), and in the portable zip name.
-- Source published to a private GitHub repository. Built binaries are attached to Releases, not committed.
+- Source published to GitHub. Built binaries are attached to Releases, not committed.
 
 ## 1.0.0 (unversioned at the time)
 
