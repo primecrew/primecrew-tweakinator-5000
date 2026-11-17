@@ -5,6 +5,7 @@
 mod catalog;
 mod help;
 mod psgen;
+mod tempclean;
 mod theme;
 
 #[cfg(windows)]
@@ -88,6 +89,12 @@ mod gui {
     }
     use wizard::{After, OdAct, Step};
 
+    mod tempui {
+        include!("tempui.rs");
+    }
+    use tempui::TcAct;
+    use crate::tempclean;
+
     pub const APP_NAME: &str = "PrimeCrew Tweakinator 5000";
     pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
     pub const APP_TITLE: &str = concat!("PrimeCrew Tweakinator 5000 v", env!("CARGO_PKG_VERSION"));
@@ -99,6 +106,7 @@ mod gui {
         Revert { cats: Vec<Cat> },
         TempAllow,
         Od(OdAct),
+        Tc(TcAct),
     }
 
     /// Duration presets for "Temporarily allow updates" (minutes; 0 = until Restore is clicked).
@@ -116,6 +124,9 @@ mod gui {
         About,
         Preflight,
         Summary,
+        TempScan,
+        TempConfirm,
+        TempDone,
         Done,
     }
 
@@ -161,6 +172,13 @@ mod gui {
         about_open: bool,
         shot_tip: bool,
         shot: Option<Shot>,
+        shot_tc_scroll: bool,
+        tc_opts: tempclean::CleanOpts,
+        tc_scan: Arc<Mutex<Option<tempclean::Report>>>,
+        tc_result: Arc<Mutex<Option<tempclean::Report>>>,
+        tc_pending: Option<tempclean::PendingInfo>,
+        tc_ack: bool,
+        tc_scheduled: bool,
     }
 
     const SHORT_NOTE: &str = "Blocking Windows Update also blocks security / ESU patches";
@@ -217,6 +235,13 @@ mod gui {
                 about_open: false,
                 shot_tip: false,
                 shot: shot_dir.map(|dir| Shot { dir, phase: ShotPhase::Main, frames: 0, waiting: false }),
+                shot_tc_scroll: false,
+                tc_opts: Default::default(),
+                tc_scan: Arc::new(Mutex::new(None)),
+                tc_result: Arc::new(Mutex::new(None)),
+                tc_pending: tempclean::pending_status(),
+                tc_ack: false,
+                tc_scheduled: false,
             };
             a.sel[0] = false; // cleanup is opt-in
             a.push(Lvl::Info, format!("OS: {}", a.os));
@@ -230,6 +255,13 @@ mod gui {
             }
             if let Some(t) = &a.temp {
                 a.push(Lvl::Warn, format!("UPDATES TEMPORARILY ALLOWED since {}. Click Restore update kill when done.", t.since));
+            }
+            if let Some(p) = a.tc_pending.clone() {
+                if p.ran {
+                    a.push(Lvl::Info, format!("Temp cleanup at restart: {} of {} files cleared, {} recovered (see Clean temp files).", tempclean::fmt_n(p.cleared_files), tempclean::fmt_n(p.files), tempclean::fmt_bytes(p.cleared_bytes)));
+                } else {
+                    a.push(Lvl::Info, format!("Temp cleanup is scheduled for the next restart: {} items ({}).", tempclean::fmt_n(p.items), tempclean::fmt_bytes(p.bytes)));
+                }
             }
             a
         }
@@ -432,6 +464,29 @@ mod gui {
                         });
                     }
                 }
+                ShotPhase::TempScan | ShotPhase::TempConfirm | ShotPhase::TempDone => {
+                    self.help_open = false;
+                    self.about_open = false;
+                    self.shot_tip = false;
+                    self.summary = None;
+                    if shot.frames < 2 {
+                        self.shot_tc_scroll = true;
+                    }
+                    let phase = shot.phase;
+                    let (scan, result) = tempui::shot_samples(phase == ShotPhase::TempDone);
+                    if let Ok(mut g) = self.tc_scan.lock() {
+                        *g = scan;
+                    }
+                    if let Ok(mut g) = self.tc_result.lock() {
+                        *g = result;
+                    }
+                    if phase == ShotPhase::TempConfirm {
+                        self.confirm = Some(Pending::Tc(TcAct::Clean));
+                        self.tc_ack = true;
+                    } else {
+                        self.confirm = None;
+                    }
+                }
                 ShotPhase::Done => {}
             }
             let mut got = None;
@@ -450,6 +505,9 @@ mod gui {
                     ShotPhase::About => "04-about-popup.png",
                     ShotPhase::Preflight => "05-preflight-apply.png",
                     ShotPhase::Summary => "06-apply-summary.png",
+                    ShotPhase::TempScan => "07-clean-temp-scan.png",
+                    ShotPhase::TempConfirm => "08-clean-temp-confirm.png",
+                    ShotPhase::TempDone => "09-clean-temp-restart.png",
                     ShotPhase::Done => "done.png",
                 };
                 let path = shot.dir.join(name);
@@ -464,7 +522,10 @@ mod gui {
                     ShotPhase::Tip => ShotPhase::About,
                     ShotPhase::About => ShotPhase::Preflight,
                     ShotPhase::Preflight => ShotPhase::Summary,
-                    ShotPhase::Summary | ShotPhase::Done => ShotPhase::Done,
+                    ShotPhase::Summary => ShotPhase::TempScan,
+                    ShotPhase::TempScan => ShotPhase::TempConfirm,
+                    ShotPhase::TempConfirm => ShotPhase::TempDone,
+                    ShotPhase::TempDone | ShotPhase::Done => ShotPhase::Done,
                 };
                 shot.frames = 0;
                 shot.waiting = false;
@@ -476,7 +537,8 @@ mod gui {
             }
             shot.frames = shot.frames.saturating_add(1);
             let need = match shot.phase {
-                ShotPhase::Preflight | ShotPhase::Summary => 18,
+                ShotPhase::TempScan => 40,
+                ShotPhase::Preflight | ShotPhase::Summary | ShotPhase::TempConfirm | ShotPhase::TempDone => 18,
                 _ => 10,
             };
             if !shot.waiting && shot.frames >= need {
@@ -522,6 +584,7 @@ mod gui {
                 self.status = s;
                 self.rx = None;
                 self.temp = ops::temp_allow_state();
+                self.tc_pending = tempclean::pending_status();
             }
         }
 
@@ -729,6 +792,11 @@ mod gui {
                 Pending::Od(a) => {
                     let a = *a;
                     self.od_confirm(ctx, a);
+                    return;
+                }
+                Pending::Tc(a) => {
+                    let a = *a;
+                    self.tc_confirm(ctx, a);
                     return;
                 }
             };
@@ -1151,6 +1219,11 @@ mod gui {
                             }
                         });
                     });
+                    let r = ui.scope(|ui| self.tc_card(ui, ctx)).response;
+                    if self.shot_tc_scroll {
+                        r.scroll_to_me(Some(egui::Align::Min));
+                        self.shot_tc_scroll = false;
+                    }
                     theme::card(ui, "PowerShell fallback", |ui| {
                         ui.horizontal_wrapped(|ui| {
                             help::mark(ui, "Puts an equivalent script on the clipboard, or writes the full script kit next to the exe. The pasted script does not record originals; use Revert in the app to undo.", help::ID_PS, expert);

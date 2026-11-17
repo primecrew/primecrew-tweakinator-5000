@@ -131,6 +131,12 @@ impl Log {
         }
         let _ = self.tx.send(Msg::Line(l, s, detail));
     }
+    /// Written to the log file only (not the on-screen log), e.g. per-file detail in Beginner mode.
+    pub fn file_only(&mut self, l: Lvl, s: impl Into<String>) {
+        if let Some(f) = self.file.as_mut() {
+            let _ = writeln!(f, "{} [{}] {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), l.tag(), s.into());
+        }
+    }
     pub(crate) fn warn_v(&mut self, s: impl Into<String>) {
         self.counts[2] += 1;
         self.w(Lvl::Warn, s);

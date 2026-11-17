@@ -2807,7 +2807,7 @@ dependencies = [
 
 [[package]]
 name = "win10_tweaks"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "chrono",
  "dirs",

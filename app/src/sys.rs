@@ -341,6 +341,26 @@ pub fn is_windows_11() -> bool {
     os_build() >= crate::catalog::WIN11_BUILD || os_product_name().to_ascii_lowercase().contains("windows 11")
 }
 
+/// Temp folders of the real user profiles on this PC (ProfileList S-1-5-21-*), as (folder name, path).
+/// Read-only; folders that do not exist are left out.
+pub fn profile_temp_dirs() -> Vec<(String, std::path::PathBuf)> {
+    let base = r"HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList";
+    let mut v = vec![];
+    for sid in reg_subkeys(base) {
+        if !sid.starts_with("S-1-5-21-") {
+            continue;
+        }
+        let Cur::S(img) = reg_get(&format!("{base}\\{sid}"), "ProfileImagePath") else { continue };
+        let prof = std::path::PathBuf::from(expand_env(&img));
+        let name = prof.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| sid.clone());
+        let t = prof.join("AppData").join("Local").join("Temp");
+        if t.is_dir() {
+            v.push((name, t));
+        }
+    }
+    v
+}
+
 /// Reasons a reboot appears to be pending (empty = none). Read-only.
 pub fn reboot_pending_reasons() -> Vec<String> {
     let mut v = vec![];

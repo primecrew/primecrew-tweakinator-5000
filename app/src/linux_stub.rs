@@ -97,6 +97,11 @@ pub mod ops {
             }
             let _ = self.tx.send(Msg::Line(l, s, detail));
         }
+        pub fn file_only(&mut self, l: Lvl, s: impl Into<String>) {
+            if let Some(f) = self.file.as_mut() {
+                let _ = writeln!(f, "{} [{}] {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), l.tag(), s.into());
+            }
+        }
         pub fn done(&self, s: impl Into<String>) {
             let _ = self.tx.send(Msg::Done(s.into()));
         }

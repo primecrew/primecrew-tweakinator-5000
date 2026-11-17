@@ -6,12 +6,12 @@ PrimeCrew Tweakinator 5000 is a small Windows 10 utility from **PrimeCrew Softwa
 
 ## Download
 
-Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.4.0**.
+Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.5.0**.
 
-- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.4.0-x64-Setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.4.0/PrimeCrewTweakinator5000-v1.4.0-x64-Setup.exe)  
+- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.5.0-x64-Setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.0/PrimeCrewTweakinator5000-v1.5.0-x64-Setup.exe)  
   A normal setup. It adds a Start menu entry under PrimeCrew Software and appears in Add/Remove Programs.
 
-- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.4.0.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.4.0/PrimeCrewTweakinator5000-v1.4.0.zip)**  
+- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.5.0.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.0/PrimeCrewTweakinator5000-v1.5.0.zip)**  
   Unzip anywhere, run `PrimeCrewTweakinator5000.exe`. Nothing gets installed, and you can run it from a USB stick.
 
 **Requirements:** Windows 10 64-bit (aimed at Pro 22H2). The app asks for administrator permission (a UAC prompt) when you run it. The GUI needs a GPU/driver with OpenGL 2+ (normal on real hardware; may fail in a bare VM or some RDP sessions). No extra runtime. The app contains no network code and sends no telemetry.
@@ -24,7 +24,7 @@ The exe is unsigned, so Windows SmartScreen may say “Windows protected your PC
 
 **Uninstall:** use Add/Remove Programs or `uninstall.exe` in the install folder. Uninstalling removes the app, its Start menu shortcut, and the Add/Remove Programs entry. It does **not** revert any tweaks you applied, and it does **not** delete logs, recorded originals, or backups under `C:\ProgramData\Win10Tweaks`. Revert stays an in-app action: if you want your previous Windows settings back, run the app and click **Revert** before uninstalling. The uninstaller also shows this note. The **PrimeCrew Software** Start menu folder is removed only if it is empty. The parent `C:\Program Files\PrimeCrew Software` folder is left in place if other PrimeCrew Software apps are installed there.
 
-**Compatibility:** state, logs and backups stay under `C:\ProgramData\Win10Tweaks\` (logs in `Logs\`, state in `state.json`, UI prefs in `ui.json`, temporary-allow state in `tempallow.json`). Scheduled task and firewall rule names still use the `Win10Tweaks-*` prefix, so this release continues to manage tweaks applied by earlier builds. Version history is in [CHANGELOG.md](CHANGELOG.md).
+**Compatibility:** state, logs and backups stay under `C:\ProgramData\Win10Tweaks\` (logs in `Logs\`, state in `state.json`, UI prefs in `ui.json`, temporary-allow state in `tempallow.json`, temp files scheduled for the next restart in `tempclean-pending.json`). Scheduled task and firewall rule names still use the `Win10Tweaks-*` prefix, so this release continues to manage tweaks applied by earlier builds. Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## What it is
 
@@ -34,7 +34,7 @@ A portable, offline, admin-only GUI (Rust, eframe/egui) for a small set of Windo
 
 You tick the tweaks you want, review the exact changes, and confirm. The default path creates a System Restore point first (Apply aborts if that fails while the box is ticked). Afterward you can **Verify** (read-only PASS / FAIL / WARN) or **Revert** (restores the values recorded in `state.json`). A **Copy PowerShell** button puts an equivalent self-contained script on the clipboard, and **Export PS kit** writes the script folder next to the exe.
 
-The OneDrive removal wizard is a separate, guided flow. It is never part of Apply all.
+The OneDrive removal wizard and **Clean temp files** are separate, guided tools. Neither is ever part of Apply all.
 
 ## Feature summary
 
@@ -94,6 +94,23 @@ A step-by-step wizard, never part of Apply all. **Your files are never deleted**
 
 **Expert mode** (Options, off by default, saved in `ui.json`): skips the welcome screen and the explanations / (i) tips, and shows registry paths, attrib flags and counts. It keeps the files gate, every destructive confirm, and all Apply / Revert confirmations.
 
+### Clean temp files
+
+![Clean temp files card after a scan: 4,812 files, 2.3 GB can be cleaned](docs/screenshots/07-clean-temp-scan.png)
+
+Its own card on the main window, never part of Apply all, and there is no Revert for it.
+
+1. **Scan temp files** (read-only) counts what could be cleaned, for example “4,812 files, 2.3 GB can be cleaned”. Beginner mode looks only at your own `%TEMP%` folder. Expert mode can add `C:\Windows\Temp` and other users' `AppData\Local\Temp` folders, and change the age limit.
+2. **Clean temp files…** opens a confirm window that says plainly that **deleted temp files cannot be restored** (no Recycle Bin, no undo) and needs a tick. Then the app deletes what it can.
+3. Files that another program has open (mouse or keyboard software, Teams, a browser, a running installer) are skipped quietly and counted, not reported as errors. In Beginner mode their names go to the log file only; Expert mode also shows them on screen with the Windows reason.
+4. Optional **Finish cleanup at next restart…** hands just those leftover files to Windows' own delete-at-restart list (`MoveFileExW` with `MOVEFILE_DELAY_UNTIL_REBOOT`, stored in `PendingFileRenameOperations`). Windows deletes them early in startup, before services and programs start. What was scheduled is recorded in `C:\ProgramData\Win10Tweaks\tempclean-pending.json`, so after the restart the card shows how many files were cleared and how much space came back. **Cancel scheduled cleanup…** removes only this app's entries from that list before you restart.
+
+![Confirm window: deleted temp files cannot be restored](docs/screenshots/08-clean-temp-confirm.png)
+
+Safety rules: files and folders changed in the last 24 hours are left alone (Expert: 1 hour, 3 days, or 7 days). Only paths strictly inside the temp folders are touched; symbolic links, junctions and other reparse points are never followed or deleted. A folder is used only if it is named `Temp` / `Tmp` and is not the top of a drive, so an unusual `TEMP` setting such as `C:\` is refused. The folder the app is running from is never touched. Empty folders left behind are removed. The scan is only a preview: Clean checks everything again as it runs. Until you restart after scheduling, the pre-flight check reports a pending reboot.
+
+![After cleaning: files in use can be finished at the next restart](docs/screenshots/09-clean-temp-restart.png)
+
 ### Menu bar, Help, and About
 
 A classic menu bar sits across the top:
@@ -103,7 +120,7 @@ A classic menu bar sits across the top:
 - **Options** — Expert mode (off by default, saved in `ui.json`). Apply-time checkboxes (restore point, policy only, keep Microsoft 365, cleanup override) stay in the Apply options card.
 - **Help** — Help contents (F1), and **About PrimeCrew Tweakinator 5000…**
 
-The Help window is resizable, with a topic list on the left and readable text on the right. It covers getting started, the pre-flight check, every tweak (what it changes, why you might want it, risks, and how to undo it — registry lists are generated from the same catalog the app uses), Temporary allow, the OneDrive wizard step by step, themes, the PowerShell fallback, how to read the log, logs and saved state, uninstalling, and known limits. A small “Help” link on each tweak and in the wizard opens the matching topic.
+The Help window is resizable, with a topic list on the left and readable text on the right. It covers getting started, the pre-flight check, Clean temp files, every tweak (what it changes, why you might want it, risks, and how to undo it — registry lists are generated from the same catalog the app uses), Temporary allow, the OneDrive wizard step by step, themes, the PowerShell fallback, how to read the log, logs and saved state, uninstalling, and known limits. A small “Help” link on each tweak and in the wizard opens the matching topic.
 
 Circled question marks (a “?” inside a circle, not a “(?)” label) sit next to settings, actions and wizard steps. Hover for a short explanation; click to open that Help topic. They are shown in Beginner mode and, more quietly, in Expert mode.
 
@@ -131,7 +148,7 @@ The same tweaks as scripts in this folder (`Apply-All-Tweaks.ps1` / `.cmd`, `Ver
 - After Apply, click Verify, and keep the default restore-point option on.
 - A manual MSU or a repair install / in-place upgrade can undo the Updates kill (it rewrites services, tasks and the WaaSMedicSvc key ACL). The SYSTEM-deny ACE on that key can also make a manual cumulative update fail — **Revert the Updates tweak before installing updates by hand**, then re-apply if you still want the kill. Run Verify after any manual update.
 - Run the app (or scripts) as the account that uses the PC: HKCU values go to the account that elevates. If you elevate with a different admin account, the header shows a red "RUNNING AS … NOT …" warning and the OneDrive wizard is locked.
-- Revert cannot reinstall removed Appx packages (use the Store, after Temporary allow if the kill is on). Cleanup cannot be meaningfully reverted (deleted cache files stay deleted).
+- Revert cannot reinstall removed Appx packages (use the Store, after Temporary allow if the kill is on). Cleanup cannot be meaningfully reverted (deleted cache files stay deleted). **Clean temp files** has no undo either: deleted temp files do not go to the Recycle Bin.
 - Typical resets after a cumulative update or a Store update: Copilot or ContentDeliveryManager values come back. Fix: Verify, then re-apply (idempotent). Optional: `Apply-All-Tweaks.ps1 -RegisterReapplyTask` re-applies at each logon (don't move the script folder).
 
 ## Run the PowerShell kit
@@ -228,8 +245,8 @@ Output: `app/target/x86_64-pc-windows-gnullvm/release/PrimeCrewTweakinator5000.e
 Release artifacts:
 
 ```
-PrimeCrewTweakinator5000-v1.4.0-x64-Setup.exe
-PrimeCrewTweakinator5000-v1.4.0.zip
+PrimeCrewTweakinator5000-v1.5.0-x64-Setup.exe
+PrimeCrewTweakinator5000-v1.5.0.zip
   PrimeCrewTweakinator5000/PrimeCrewTweakinator5000.exe
   PrimeCrewTweakinator5000/README.md
 ```

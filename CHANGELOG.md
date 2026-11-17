@@ -2,6 +2,14 @@
 
 User-facing history for PrimeCrew Tweakinator 5000.
 
+## 1.5.0
+
+- New **Clean temp files** card (its own card, never part of Apply all, no Revert). **Scan temp files** is read-only and shows how many files and how much space can be cleaned. Beginner mode cleans only your own `%TEMP%`. Expert mode can add `C:\Windows\Temp` and other users' temp folders, and change the age limit (1 hour, 24 hours, 3 days, 7 days).
+- **Clean temp files…** asks for confirmation with a required tick: deleted temp files cannot be restored (no Recycle Bin, no undo). Files changed in the last 24 hours are left alone by default. Files in use by other programs are skipped quietly and counted, not reported as errors; their names and the Windows reason are in the log file, and on screen in Expert mode. Empty folders left behind are removed.
+- Safety rules: only paths strictly inside the temp folders are touched; symbolic links, junctions and other reparse points are never followed or deleted; a folder is used only if it is named Temp / Tmp and is not the top of a drive; the folder the app runs from is never touched; Clean checks everything again as it runs (the scan is only a preview).
+- Optional **Finish cleanup at next restart…** adds only the files that were in use to Windows' delete-at-restart list (`MoveFileExW` + `MOVEFILE_DELAY_UNTIL_REBOOT`). What was scheduled is recorded in `C:\ProgramData\Win10Tweaks\tempclean-pending.json`; after the restart the card shows how many files were cleared and how much space came back. **Cancel scheduled cleanup…** removes only this app's entries and leaves entries from Windows or other programs untouched.
+- Help topic: Clean temp files, plus a circled-? tip on the card. Logs and saved state, and Known limits, mention the new file and that temp cleanup cannot be undone.
+
 ## 1.4.0
 
 - Pre-flight check (read-only) before Apply, also shown on the main window under This PC: administrator rights, whether the signed-in account is an administrator, the UAC level (info only — never changed), Microsoft Defender Tamper Protection and any third-party antivirus, a mismatch between the elevated and signed-in accounts, a pending reboot, and whether this is Windows 10 or 11. If the app is not elevated, a Restart as administrator button asks Windows for a UAC prompt. Each item has a Help link.

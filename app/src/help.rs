@@ -41,6 +41,7 @@ pub const ID_LIMITS: &str = "limits";
 pub const ID_OPTIONS: &str = "options";
 pub const ID_LOG_GUIDE: &str = "understanding-the-log";
 pub const ID_PREFLIGHT: &str = "preflight";
+pub const ID_TEMPCLEAN: &str = "clean-temp-files";
 
 pub fn id_for(c: Cat) -> &'static str {
     match c {
@@ -90,6 +91,7 @@ const TOPICS: &[Topic] = &[
     Topic { id: ID_COPILOT, title: "Remove Copilot", prose: COPILOT, cat: Some(Cat::Copilot) },
     Topic { id: ID_SPOT, title: "Spotlight, tips, news and widgets", prose: SPOT, cat: Some(Cat::Spotlight) },
     Topic { id: ID_GOD, title: "God Mode folder", prose: GOD, cat: Some(Cat::GodMode) },
+    Topic { id: ID_TEMPCLEAN, title: "Clean temp files", prose: TEMPCLEAN, cat: None },
     Topic { id: ID_ONEDRIVE, title: "OneDrive removal wizard", prose: ONEDRIVE, cat: Some(Cat::OneDrive) },
     Topic { id: ID_OD_CHECK, title: "OneDrive: check files", prose: OD_CHECK, cat: None },
     Topic { id: ID_OD_STOP, title: "OneDrive: stop sync", prose: OD_STOP, cat: None },
@@ -632,6 +634,44 @@ From the kit
 The PowerShell kit and the GUI share the same state.json format and the same setting paths.
 ";
 
+const TEMPCLEAN: &str = "\
+Clean temp files frees disk space by deleting leftover temporary files. Programs and installers put files in a temp folder while they work and often forget to delete them. Over months this can add up to gigabytes.
+
+It is its own card on the main window. It is not a tweak, and it is never part of Apply all.
+
+How it works
+1. Click Scan temp files. This is read-only. It counts the files that could be cleaned and how much space they use, for example “4,812 files, 2.3 GB can be cleaned”.
+2. Click Clean temp files…, read the confirm window, tick “I understand deleted temp files cannot be restored”, and click Delete temp files.
+3. Files that another program is using right now (mouse or keyboard software, Teams, a browser, an installer that is still running) cannot be deleted while Windows is running. They are left alone and counted. That is normal and is not an error.
+4. If some files were in use, you can click Finish cleanup at next restart…. The app hands just those files to Windows' own delete-at-restart list. Windows deletes them very early in the next startup, before services and programs start and grab them again. Nothing happens until you restart.
+5. After the restart, the card shows how many of those files were cleared and how much space came back. Click Dismiss when you have read it.
+
+What is cleaned
+• Beginner mode: only your own temp folder (%TEMP%, usually C:\\Users\\<you>\\AppData\\Local\\Temp).
+• Expert mode can add C:\\Windows\\Temp and the temp folders of other user accounts on this PC.
+
+Safety rules
+• Deleted temp files cannot be restored. They do not go to the Recycle Bin, and there is no Revert. The confirm window says so and needs a tick.
+• Files and folders changed in the last 24 hours are left alone, so a half-finished install or update is not disturbed. Expert mode can change this to 1 hour, 3 days, or 7 days.
+• Only files inside the temp folders are deleted. Shortcuts, symbolic links and junctions are never followed and never deleted, so nothing outside the temp folder can be reached.
+• A folder is only used if its name is Temp (or Tmp) and it is not the top of a drive. If your TEMP setting points somewhere unusual, such as C:\\ or C:\\Temp, the card says “Not used” and leaves it alone.
+• The folder this app is running from is never touched (for example, if you opened the exe straight from a zip file).
+• Empty folders left behind are removed, except recently changed ones.
+• The scan is only a preview. Clean looks at the folders again and applies the same rules at the moment it runs.
+
+Finish cleanup at next restart
+• Uses MoveFileEx with MOVEFILE_DELAY_UNTIL_REBOOT, which adds entries to HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\PendingFileRenameOperations. This needs administrator rights.
+• Each file is checked again first: still there, not a link, and inside a temp folder.
+• What was scheduled is recorded in C:\\ProgramData\\Win10Tweaks\\tempclean-pending.json, so the card can report the result after the restart. When you click Dismiss it is kept as tempclean-last.json.
+• Until you restart, the pre-flight check says “Windows has file renames waiting for a reboot”. That is expected, and it means the SoftwareDistribution cleanup tweak waits until after the restart.
+• Cancel scheduled cleanup… removes only this app's entries from that list. Entries from Windows Update or other programs are left exactly as they are.
+• A file a program opens again very early in startup can survive. The card counts those as “still there”.
+
+In the log
+• Each folder gets one line: how many files were deleted and how much space was freed, plus how many were in use and left alone.
+• In Beginner mode the names of files that were in use are written to the log file only. Expert mode also shows them on screen, with the Windows reason (for example, “sharing violation”).
+";
+
 const LOGS: &str = "\
 Everything the app writes is logged, and a small amount of state is saved so Revert and the wizard can undo their work.
 
@@ -642,6 +682,7 @@ Locations (all under C:\\ProgramData\\Win10Tweaks\\)
 • state.json — recorded originals and other undo information. Shared with the PowerShell kit.
 • ui.json — theme, text size, log size, and Expert mode.
 • tempallow.json — whether a temporary update allow is active, and when it expires.
+• tempclean-pending.json — temp files scheduled for deletion at the next restart (kept as tempclean-last.json after you dismiss the result).
 
 Scheduled task and firewall rule names still use the Win10Tweaks-* prefix, so this release can manage tweaks applied by earlier builds.
 
@@ -675,7 +716,7 @@ Please read these before you rely on the hard update kill or share the app.
 
 • Run the app as the account that uses the PC. Per-user settings go to the account that elevates. If you elevate with a different admin account, the header shows a warning and the OneDrive wizard is locked.
 
-• Revert cannot reinstall removed apps. Cleanup cannot bring back deleted cache files. Typical resets after a cumulative or Store update: Copilot or Spotlight values come back — Verify, then re-apply.
+• Revert cannot reinstall removed apps. Cleanup cannot bring back deleted cache files, and Clean temp files cannot bring back deleted temp files. Typical resets after a cumulative or Store update: Copilot or Spotlight values come back — Verify, then re-apply.
 
 • Temporary allow is the supported way to update Store apps while the kill is in place. Click Restore update kill when you are done, and before uninstalling if a timer is still running.
 ";
