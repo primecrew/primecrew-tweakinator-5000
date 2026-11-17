@@ -647,14 +647,15 @@ How it works
 5. After the restart, the card shows how many of those files were cleared and how much space came back. Click Dismiss when you have read it.
 
 What is cleaned
-• Beginner mode: only your own temp folder (%TEMP%, usually C:\\Users\\<you>\\AppData\\Local\\Temp).
-• Expert mode can add C:\\Windows\\Temp and the temp folders of other user accounts on this PC.
+• By default (Beginner and Expert mode): your own temp folder (%TMP% / %TEMP%, normally C:\\Users\\<you>\\AppData\\Local\\Temp) and the Windows temp folder, C:\\Windows\\Temp.
+• Your %TMP% / %TEMP% is cleaned only when it is the standard AppData\\Local\\Temp folder. If it points to a custom folder (for example D:\\Scratch or C:\\Temp), it is left alone and the card shows a “Not used” note.
+• Expert mode can also add the temp folders of other user accounts on this PC, or leave out C:\\Windows\\Temp.
 
 Safety rules
 • Deleted temp files cannot be restored. They do not go to the Recycle Bin, and there is no Revert. The confirm window says so and needs a tick.
 • Files and folders changed in the last 24 hours are left alone, so a half-finished install or update is not disturbed. Expert mode can change this to 1 hour, 3 days, or 7 days.
 • Only files inside the temp folders are deleted. Shortcuts, symbolic links and junctions are never followed and never deleted, so nothing outside the temp folder can be reached.
-• A folder is only used if its name is Temp (or Tmp) and it is not the top of a drive. If your TEMP setting points somewhere unusual, such as C:\\ or C:\\Temp, the card says “Not used” and leaves it alone.
+• A folder is only used if its name is Temp (or Tmp) and it is not the top of a drive, and your own temp folder only if it is the standard AppData\\Local\\Temp. Anything else gets a “Not used” note and is left alone.
 • The folder this app is running from is never touched (for example, if you opened the exe straight from a zip file).
 • Empty folders left behind are removed, except recently changed ones.
 • The scan is only a preview. Clean looks at the folders again and applies the same rules at the moment it runs.

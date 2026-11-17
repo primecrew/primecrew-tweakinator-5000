@@ -61,12 +61,13 @@ pub struct CleanOpts {
 
 impl Default for CleanOpts {
     fn default() -> Self {
-        CleanOpts { include_windows: false, include_other_users: false, min_age_hours: DEFAULT_MIN_AGE_HOURS }
+        CleanOpts { include_windows: true, include_other_users: false, min_age_hours: DEFAULT_MIN_AGE_HOURS }
     }
 }
 
 impl CleanOpts {
-    /// Beginner mode always uses the safe defaults (your own %TEMP%, 24 hours).
+    /// Beginner mode always uses the defaults: your own %TMP% / %TEMP% (standard location only) plus
+    /// C:\Windows\Temp, 24 hours. Other accounts' temp folders are Expert-only.
     pub fn effective(self, expert: bool) -> Self {
         if expert {
             CleanOpts { min_age_hours: self.min_age_hours.max(1), ..self }
@@ -450,11 +451,21 @@ pub fn current_user_temp() -> Option<PathBuf> {
     canon(&std::env::temp_dir())
 }
 
+/// The user's temp folder is cleaned only when it is the standard `<profile>\AppData\Local\Temp`.
+/// Both paths should already be canonical.
+pub fn is_standard_user_temp(candidate: &Path, profile: &Path) -> bool {
+    let std_temp = profile.join("AppData").join("Local").join("Temp");
+    let std_temp = canon(&std_temp).unwrap_or(std_temp);
+    norm_key(&candidate.to_string_lossy()) == norm_key(&std_temp.to_string_lossy())
+}
+
+pub const CUSTOM_TEMP_NOTE: &str = "points to a custom folder, so it is left alone. Only the standard AppData\\Local\\Temp is cleaned.";
+
 /// The roots for these options plus any folder refused by `root_ok`.
 pub fn roots(o: CleanOpts) -> (Vec<Root>, Vec<(String, String)>) {
     let mut out: Vec<Root> = vec![];
     let mut refused = vec![];
-    let mut push = |kind: RootKind, label: String, p: PathBuf, out: &mut Vec<Root>| {
+    let push = |kind: RootKind, label: String, p: PathBuf, out: &mut Vec<Root>, refused: &mut Vec<(String, String)>| {
         let Some(c) = canon(&p) else { return };
         if out.iter().any(|r| norm_key(&r.path.to_string_lossy()) == norm_key(&c.to_string_lossy())) {
             return;
@@ -464,16 +475,37 @@ pub fn roots(o: CleanOpts) -> (Vec<Root>, Vec<(String, String)>) {
             Err(e) => refused.push((format!("{label} ({})", display_path(&c)), e)),
         }
     };
-    push(RootKind::CurrentUser, "Your temp folder (%TEMP%)".into(), std::env::temp_dir(), &mut out);
+    #[cfg(windows)]
+    {
+        // %TMP% and %TEMP% (Windows uses TMP first). Only the standard AppData\Local\Temp is cleaned.
+        let profile = std::env::var_os("USERPROFILE").map(PathBuf::from).and_then(|p| canon(&p));
+        for var in ["TMP", "TEMP"] {
+            let Some(raw) = std::env::var_os(var).map(PathBuf::from) else { continue };
+            let Some(c) = canon(&raw) else { continue };
+            if out.iter().any(|r| norm_key(&r.path.to_string_lossy()) == norm_key(&c.to_string_lossy())) {
+                continue;
+            }
+            if profile.as_deref().is_some_and(|p| is_standard_user_temp(&c, p)) {
+                push(RootKind::CurrentUser, "Your temp folder (%TMP% / %TEMP%)".into(), raw, &mut out, &mut refused);
+            } else {
+                let label = format!("Your %{var}% ({})", display_path(&c));
+                if !refused.iter().any(|(l, _)| *l == label) {
+                    refused.push((label, CUSTOM_TEMP_NOTE.into()));
+                }
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    push(RootKind::CurrentUser, "Your temp folder (%TMP% / %TEMP%)".into(), std::env::temp_dir(), &mut out, &mut refused);
     #[cfg(windows)]
     {
         if o.include_windows {
             let win = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-            push(RootKind::Windows, "Windows temp folder".into(), PathBuf::from(win).join("Temp"), &mut out);
+            push(RootKind::Windows, "Windows temp folder".into(), PathBuf::from(win).join("Temp"), &mut out, &mut refused);
         }
         if o.include_other_users {
             for (name, p) in crate::sys::profile_temp_dirs() {
-                push(RootKind::OtherUser, format!("Temp folder of {name}"), p, &mut out);
+                push(RootKind::OtherUser, format!("Temp folder of {name}"), p, &mut out, &mut refused);
             }
         }
     }
@@ -910,7 +942,13 @@ mod tests {
         assert_eq!(fmt_n(4812), "4,812");
         assert_eq!(age_label(24), "24 hours");
         assert_eq!(age_label(168), "7 days");
-        assert_eq!(CleanOpts { include_windows: true, include_other_users: true, min_age_hours: 1 }.effective(false), CleanOpts::default());
+        assert_eq!(CleanOpts { include_windows: false, include_other_users: true, min_age_hours: 1 }.effective(false), CleanOpts::default());
+        let d = CleanOpts::default();
+        assert!(d.include_windows && !d.include_other_users && d.min_age_hours == 24, "Windows\\Temp is cleaned by default; other accounts are Expert-only");
+        assert!(is_standard_user_temp(Path::new("/nonexistent/Users/A/AppData/Local/Temp"), Path::new("/nonexistent/Users/A")));
+        assert!(is_standard_user_temp(Path::new("/nonexistent/Users/A/appdata/local/TEMP"), Path::new("/nonexistent/Users/A")));
+        assert!(!is_standard_user_temp(Path::new("/nonexistent/Scratch/Temp"), Path::new("/nonexistent/Users/A")));
+        assert!(!is_standard_user_temp(Path::new("/nonexistent/Users/B/AppData/Local/Temp"), Path::new("/nonexistent/Users/A")));
     }
 
     #[test]

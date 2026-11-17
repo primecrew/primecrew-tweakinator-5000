@@ -14,7 +14,7 @@ pub enum TcAct {
     CancelSchedule,
 }
 
-pub const TIP: &str = "Deletes leftover temporary files. Scan first to see how much space you would get back. Files changed in the last 24 hours and files in use are left alone. Deleted temp files cannot be restored. Not part of Apply all. Click for details.";
+pub const TIP: &str = "Deletes leftover temporary files from your temp folder (AppData\\Local\\Temp) and C:\\Windows\\Temp. Scan first to see how much space you would get back. Files changed in the last 24 hours and files in use are left alone. Deleted temp files cannot be restored. Not part of Apply all. Click for details.";
 
 impl App {
     pub(super) fn tc_opts_now(&self) -> CleanOpts {
@@ -69,7 +69,7 @@ impl App {
         let o = self.tc_opts_now();
         theme::card(ui, "Clean temp files", |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.add(egui::Label::new(RichText::new("Frees disk space by deleting leftover temporary files. Scan first; nothing is deleted until you confirm. Not part of Apply all.").color(k.muted)).wrap());
+                ui.add(egui::Label::new(RichText::new("Frees disk space by deleting leftover temporary files from your temp folder (AppData\\Local\\Temp) and C:\\Windows\\Temp. Scan first; nothing is deleted until you confirm. Not part of Apply all.").color(k.muted)).wrap());
                 help::mark(ui, TIP, help::ID_TEMPCLEAN, expert);
                 help::link(ui, help::ID_TEMPCLEAN);
             });
@@ -79,7 +79,7 @@ impl App {
             if expert {
                 ui.add_space(2.0);
                 ui.horizontal_wrapped(|ui| {
-                    ui.add_enabled(!busy, egui::Checkbox::new(&mut self.tc_opts.include_windows, "Also C:\\Windows\\Temp"));
+                    ui.add_enabled(!busy, egui::Checkbox::new(&mut self.tc_opts.include_windows, "Include C:\\Windows\\Temp (default)"));
                     ui.add_enabled(!busy, egui::Checkbox::new(&mut self.tc_opts.include_other_users, "Also other users' temp folders"));
                 });
                 ui.horizontal_wrapped(|ui| {
@@ -230,6 +230,9 @@ impl App {
                                 let line = format!("• {} — {}", r.root.label, r.root.shown());
                                 ui.add(egui::Label::new(if expert { RichText::new(line).monospace() } else { RichText::new(line) }).wrap());
                             }
+                            for (label, why) in &s.refused {
+                                ui.add(egui::Label::new(RichText::new(format!("Not used: {label} — {why}")).color(k.warn)).wrap());
+                            }
                             ui.add_space(4.0);
                             ui.add(egui::Label::new(RichText::new(format!("• Files changed in the last {} are left alone.", age_label(s.opts.min_age_hours))).color(k.muted)).wrap());
                             ui.add(egui::Label::new(RichText::new("• Files in use by other programs are skipped. You can finish those at the next restart.").color(k.muted)).wrap());
@@ -320,15 +323,22 @@ pub fn shot_samples(after_clean: bool) -> (Option<Report>, Option<Report>) {
     use std::path::PathBuf;
     use tc::{Locked, Root, RootKind, RootResult, Stats};
     let root = PathBuf::from(r"C:\Users\You\AppData\Local\Temp");
-    let r = Root { kind: RootKind::CurrentUser, label: "Your temp folder (%TEMP%)".into(), path: root.clone() };
+    let r = Root { kind: RootKind::CurrentUser, label: "Your temp folder (%TMP% / %TEMP%)".into(), path: root.clone() };
+    let w = Root { kind: RootKind::Windows, label: "Windows temp folder".into(), path: PathBuf::from(r"C:\Windows\Temp") };
     let scan = Report {
         cleaned: false,
         opts: CleanOpts::default(),
         when: "2026-11-17 09:58".into(),
-        roots: vec![RootResult {
-            root: r.clone(),
-            stats: Stats { eligible_files: 4812, eligible_bytes: 2_469_606_195, recent_files: 37, recent_bytes: 12_582_912, ..Default::default() },
-        }],
+        roots: vec![
+            RootResult {
+                root: r.clone(),
+                stats: Stats { eligible_files: 4210, eligible_bytes: 2_169_606_195, recent_files: 37, recent_bytes: 12_582_912, ..Default::default() },
+            },
+            RootResult {
+                root: w.clone(),
+                stats: Stats { eligible_files: 602, eligible_bytes: 300_000_000, recent_files: 9, recent_bytes: 2_097_152, ..Default::default() },
+            },
+        ],
         refused: vec![],
         preview_only: false,
     };
@@ -343,10 +353,16 @@ pub fn shot_samples(after_clean: bool) -> (Option<Report>, Option<Report>) {
     let locked_bytes = locked.iter().map(|l| l.bytes).sum();
     let done = Report {
         cleaned: true,
-        roots: vec![RootResult {
-            root: r,
-            stats: Stats { eligible_files: 4812, deleted_files: 4808, deleted_bytes: 2_439_606_195, deleted_dirs: 211, locked, locked_bytes, ..Default::default() },
-        }],
+        roots: vec![
+            RootResult {
+                root: r,
+                stats: Stats { eligible_files: 4210, deleted_files: 4206, deleted_bytes: 2_139_606_195, deleted_dirs: 198, locked, locked_bytes, ..Default::default() },
+            },
+            RootResult {
+                root: w,
+                stats: Stats { eligible_files: 602, deleted_files: 602, deleted_bytes: 300_000_000, deleted_dirs: 13, ..Default::default() },
+            },
+        ],
         ..scan
     };
     (None, Some(done))

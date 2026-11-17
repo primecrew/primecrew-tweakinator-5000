@@ -6,12 +6,12 @@ PrimeCrew Tweakinator 5000 is a small Windows 10 utility from **PrimeCrew Softwa
 
 ## Download
 
-Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.5.0**.
+Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.5.1**.
 
-- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.5.0-x64-Setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.0/PrimeCrewTweakinator5000-v1.5.0-x64-Setup.exe)  
+- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.5.1-x64-Setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.1/PrimeCrewTweakinator5000-v1.5.1-x64-Setup.exe)  
   A normal setup. It adds a Start menu entry under PrimeCrew Software and appears in Add/Remove Programs.
 
-- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.5.0.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.0/PrimeCrewTweakinator5000-v1.5.0.zip)**  
+- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.5.1.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.1/PrimeCrewTweakinator5000-v1.5.1.zip)**  
   Unzip anywhere, run `PrimeCrewTweakinator5000.exe`. Nothing gets installed, and you can run it from a USB stick.
 
 **Requirements:** Windows 10 64-bit (aimed at Pro 22H2). The app asks for administrator permission (a UAC prompt) when you run it. The GUI needs a GPU/driver with OpenGL 2+ (normal on real hardware; may fail in a bare VM or some RDP sessions). No extra runtime. The app contains no network code and sends no telemetry.
@@ -100,14 +100,14 @@ A step-by-step wizard, never part of Apply all. **Your files are never deleted**
 
 Its own card on the main window, never part of Apply all, and there is no Revert for it.
 
-1. **Scan temp files** (read-only) counts what could be cleaned, for example “4,812 files, 2.3 GB can be cleaned”. Beginner mode looks only at your own `%TEMP%` folder. Expert mode can add `C:\Windows\Temp` and other users' `AppData\Local\Temp` folders, and change the age limit.
+1. **Scan temp files** (read-only) counts what could be cleaned, for example “4,812 files, 2.3 GB can be cleaned”. By default it looks at the two usual places: your own temp folder (`%TMP%` / `%TEMP%`, normally `AppData\Local\Temp`) and `C:\Windows\Temp`. Your `%TMP%` / `%TEMP%` is cleaned only when it is the standard `AppData\Local\Temp`; if it points to a custom folder, it is left alone and the card shows a note. Expert mode can also add other user accounts' `AppData\Local\Temp` folders, leave out `C:\Windows\Temp`, and change the age limit.
 2. **Clean temp files…** opens a confirm window that says plainly that **deleted temp files cannot be restored** (no Recycle Bin, no undo) and needs a tick. Then the app deletes what it can.
 3. Files that another program has open (mouse or keyboard software, Teams, a browser, a running installer) are skipped quietly and counted, not reported as errors. In Beginner mode their names go to the log file only; Expert mode also shows them on screen with the Windows reason.
 4. Optional **Finish cleanup at next restart…** hands just those leftover files to Windows' own delete-at-restart list (`MoveFileExW` with `MOVEFILE_DELAY_UNTIL_REBOOT`, stored in `PendingFileRenameOperations`). Windows deletes them early in startup, before services and programs start. What was scheduled is recorded in `C:\ProgramData\Win10Tweaks\tempclean-pending.json`, so after the restart the card shows how many files were cleared and how much space came back. **Cancel scheduled cleanup…** removes only this app's entries from that list before you restart.
 
 ![Confirm window: deleted temp files cannot be restored](docs/screenshots/08-clean-temp-confirm.png)
 
-Safety rules: files and folders changed in the last 24 hours are left alone (Expert: 1 hour, 3 days, or 7 days). Only paths strictly inside the temp folders are touched; symbolic links, junctions and other reparse points are never followed or deleted. A folder is used only if it is named `Temp` / `Tmp` and is not the top of a drive, so an unusual `TEMP` setting such as `C:\` is refused. The folder the app is running from is never touched. Empty folders left behind are removed. The scan is only a preview: Clean checks everything again as it runs. Until you restart after scheduling, the pre-flight check reports a pending reboot.
+Safety rules: files and folders changed in the last 24 hours are left alone (Expert: 1 hour, 3 days, or 7 days). Only paths strictly inside the temp folders are touched; symbolic links, junctions and other reparse points are never followed or deleted. A folder is used only if it is named `Temp` / `Tmp` and is not the top of a drive, and your own temp folder only if it is the standard `AppData\Local\Temp`, so a custom `TEMP` setting such as `C:\` or `D:\Scratch` is left alone. The folder the app is running from is never touched. Empty folders left behind are removed. The scan is only a preview: Clean checks everything again as it runs. Until you restart after scheduling, the pre-flight check reports a pending reboot.
 
 ![After cleaning: files in use can be finished at the next restart](docs/screenshots/09-clean-temp-restart.png)
 
@@ -245,8 +245,8 @@ Output: `app/target/x86_64-pc-windows-gnullvm/release/PrimeCrewTweakinator5000.e
 Release artifacts:
 
 ```
-PrimeCrewTweakinator5000-v1.5.0-x64-Setup.exe
-PrimeCrewTweakinator5000-v1.5.0.zip
+PrimeCrewTweakinator5000-v1.5.1-x64-Setup.exe
+PrimeCrewTweakinator5000-v1.5.1.zip
   PrimeCrewTweakinator5000/PrimeCrewTweakinator5000.exe
   PrimeCrewTweakinator5000/README.md
 ```

@@ -2,6 +2,11 @@
 
 User-facing history for PrimeCrew Tweakinator 5000.
 
+## 1.5.1
+
+- Clean temp files now covers both usual places by default, in Beginner and Expert mode: your own temp folder (`%TMP%` / `%TEMP%`, normally `AppData\Local\Temp`) and `C:\Windows\Temp`. Other user accounts' temp folders stay Expert-only, and Expert mode can leave out `C:\Windows\Temp`.
+- Your `%TMP%` / `%TEMP%` is cleaned only when it resolves to the standard `<profile>\AppData\Local\Temp`. If it points to a custom folder, it is left alone and the card and confirm window show a “Not used” note.
+
 ## 1.5.0
 
 - New **Clean temp files** card (its own card, never part of Apply all, no Revert). **Scan temp files** is read-only and shows how many files and how much space can be cleaned. Beginner mode cleans only your own `%TEMP%`. Expert mode can add `C:\Windows\Temp` and other users' temp folders, and change the age limit (1 hour, 24 hours, 3 days, 7 days).
