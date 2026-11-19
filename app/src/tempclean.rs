@@ -929,8 +929,18 @@ mod tests {
         assert!(root_ok(Path::new("/home/me")).is_err());
         assert!(root_ok(Path::new("relative/Temp")).is_err());
         assert!(root_ok(Path::new("/home/me/../Temp")).is_err());
-        assert!(root_ok(Path::new("/home/AppData/Local/Temp")).is_ok());
-        assert!(root_ok(Path::new("/var/TMP")).is_ok());
+        #[cfg(unix)]
+        {
+            assert!(root_ok(Path::new("/home/AppData/Local/Temp")).is_ok());
+            assert!(root_ok(Path::new("/var/TMP")).is_ok());
+        }
+        #[cfg(windows)]
+        {
+            assert!(root_ok(Path::new(r"C:\Users\A\AppData\Local\Temp")).is_ok());
+            assert!(root_ok(Path::new(r"\\?\C:\Windows\Temp")).is_ok());
+            assert!(root_ok(Path::new(r"C:\Temp")).is_err());
+            assert!(root_ok(Path::new(r"C:\")).is_err());
+        }
     }
 
     #[test]
@@ -1048,6 +1058,71 @@ mod tests {
         fs::write(root.join("x.tmp"), b"x").unwrap();
         let s = walk_root(&root, 24, later, &[root.parent().unwrap().to_path_buf()], true).unwrap();
         assert_eq!(s.deleted_files, 2);
+        let _ = fs::remove_dir_all(root.parent().unwrap());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_walker_and_restart_list() {
+        use std::os::windows::fs::FileTimesExt;
+        let root = std::env::temp_dir().join(format!("tc-win-{}", std::process::id())).join("Temp");
+        let _ = fs::remove_dir_all(root.parent().unwrap());
+        fs::create_dir_all(root.join("sub")).unwrap();
+        let root = root.canonicalize().unwrap();
+        let outside = root.parent().unwrap().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("keep.txt"), b"precious").unwrap();
+        let old = SystemTime::now() - Duration::from_secs(72 * 3600);
+        let mk_old = |p: &Path| {
+            let f = fs::File::options().write(true).open(p).unwrap();
+            f.set_times(fs::FileTimes::new().set_modified(old).set_created(old)).unwrap();
+        };
+        fs::write(root.join("old.tmp"), vec![0u8; 100]).unwrap();
+        mk_old(&root.join("old.tmp"));
+        fs::write(root.join("sub/ro.tmp"), vec![0u8; 50]).unwrap();
+        mk_old(&root.join("sub/ro.tmp"));
+        let mut perm = fs::metadata(root.join("sub/ro.tmp")).unwrap().permissions();
+        perm.set_readonly(true);
+        fs::set_permissions(root.join("sub/ro.tmp"), perm).unwrap();
+        fs::write(root.join("new.tmp"), b"n").unwrap();
+        // Prefer a junction (mklink /J needs no special privilege); fall back to a directory symlink.
+        let _ = std::process::Command::new("cmd").args(["/c", "mklink", "/J"]).arg(root.join("link")).arg(&outside).output();
+        if fs::symlink_metadata(root.join("link")).is_err() {
+            let _ = std::os::windows::fs::symlink_dir(&outside, root.join("link"));
+        }
+        let linked = fs::symlink_metadata(root.join("link")).is_ok();
+        eprintln!("link created: {linked}");
+
+        let s = walk_root(&root, 24, SystemTime::now(), &[], false).unwrap();
+        assert_eq!(s.eligible_files, 2);
+        assert_eq!(s.recent_files, 1);
+        let c = walk_root(&root, 24, SystemTime::now(), &[], true).unwrap();
+        assert_eq!(c.deleted_files, 2, "old and read-only old files deleted: {:?}", c.locked);
+        assert!(!root.join("old.tmp").exists() && !root.join("sub/ro.tmp").exists());
+        assert!(root.join("new.tmp").exists());
+        assert!(outside.join("keep.txt").exists());
+        if linked {
+            assert_eq!(c.links, 1);
+            assert!(fs::symlink_metadata(root.join("link")).is_ok());
+        }
+
+        // Delete-at-restart round trip: schedule our file, then cancel removes only ours.
+        let target = root.join("locked.tmp");
+        fs::write(&target, b"x").unwrap();
+        delay_delete(&target).unwrap();
+        let ours: std::collections::HashSet<String> = [norm_key(&target.to_string_lossy())].into_iter().collect();
+        let pairs = read_pfro().unwrap();
+        assert!(pairs.iter().any(|(s, d)| d.is_empty() && ours.contains(&norm_key(s))), "{pairs:?}");
+        let (kept, removed) = without_ours(&pairs, &ours);
+        assert_eq!(removed, 1);
+        use winreg::enums::*;
+        let k = winreg::RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey_with_flags(SM_KEY, KEY_READ | KEY_WRITE).unwrap();
+        if kept.is_empty() {
+            k.delete_value("PendingFileRenameOperations").unwrap();
+        } else {
+            k.set_raw_value("PendingFileRenameOperations", &winreg::RegValue { vtype: REG_MULTI_SZ, bytes: encode_pairs(&kept) }).unwrap();
+        }
+        assert!(!read_pfro().unwrap().iter().any(|(s, _)| ours.contains(&norm_key(s))));
         let _ = fs::remove_dir_all(root.parent().unwrap());
     }
 }

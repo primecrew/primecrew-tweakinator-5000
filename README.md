@@ -6,12 +6,12 @@ PrimeCrew Tweakinator 5000 is a small Windows 10 utility from **PrimeCrew Softwa
 
 ## Download
 
-Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.5.1**.
+Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.5.2**.
 
-- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.5.1-x64-Setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.1/PrimeCrewTweakinator5000-v1.5.1-x64-Setup.exe)  
+- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.5.2-x64-Setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.2/PrimeCrewTweakinator5000-v1.5.2-x64-Setup.exe)  
   A normal setup. It adds a Start menu entry under PrimeCrew Software and appears in Add/Remove Programs.
 
-- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.5.1.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.1/PrimeCrewTweakinator5000-v1.5.1.zip)**  
+- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.5.2.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.2/PrimeCrewTweakinator5000-v1.5.2.zip)**  
   Unzip anywhere, run `PrimeCrewTweakinator5000.exe`. Nothing gets installed, and you can run it from a USB stick.
 
 **Requirements:** Windows 10 64-bit (aimed at Pro 22H2). The app asks for administrator permission (a UAC prompt) when you run it. The GUI needs a GPU/driver with OpenGL 2+ (normal on real hardware; may fail in a bare VM or some RDP sessions). No extra runtime. The app contains no network code and sends no telemetry.
@@ -19,6 +19,13 @@ Get the latest files from the **[Releases page](https://github.com/primecrew/pri
 The exe is unsigned, so Windows SmartScreen may say “Windows protected your PC.” Click **More info**, then **Run anyway**.
 
 **Installer details:** the setup is 64-bit only. The app is installed to `C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\`. An upgrade removes previous shortcuts first so they do not duplicate.
+
+The installer says plainly what it is about to do. A **new installation** shows “New installation” with an editable **Install to:** path and a Browse button. When the app is already installed (found through its Add/Remove Programs entry: version and install location), the first page and the Ready to Install page show **“Updating existing installation: PrimeCrew Tweakinator 5000 v<old> → v<new>”** with a read-only **Installed in:** path. An update is never moved; it always goes into the existing folder (a silent `/D=` is ignored on an update). The last page says “Installed v<new> to <path>” or “Updated to v<new> in <path>”.
+
+| New installation | Updating an existing installation |
+|---|---|
+| ![New installation page with an editable Install to path and Browse button](docs/screenshots/10-installer-new.png) | ![Updating existing installation banner with a read-only Installed in path](docs/screenshots/12-installer-update.png) |
+| ![Installation complete: Installed v1.5.2 to the chosen path](docs/screenshots/11-installer-new-finish.png) | ![Update complete: Updated to v1.5.2 in the existing path](docs/screenshots/14-installer-update-finish.png) |
 
 **Portable details:** unzip and run `PrimeCrewTweakinator5000.exe` from any folder (for example `C:\Apps\PrimeCrewTweakinator5000\` or a USB stick).
 
@@ -245,8 +252,8 @@ Output: `app/target/x86_64-pc-windows-gnullvm/release/PrimeCrewTweakinator5000.e
 Release artifacts:
 
 ```
-PrimeCrewTweakinator5000-v1.5.1-x64-Setup.exe
-PrimeCrewTweakinator5000-v1.5.1.zip
+PrimeCrewTweakinator5000-v1.5.2-x64-Setup.exe
+PrimeCrewTweakinator5000-v1.5.2.zip
   PrimeCrewTweakinator5000/PrimeCrewTweakinator5000.exe
   PrimeCrewTweakinator5000/README.md
 ```

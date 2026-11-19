@@ -2,6 +2,14 @@
 
 User-facing history for PrimeCrew Tweakinator 5000.
 
+## 1.5.2
+
+- Installer: the first page now says clearly whether this is a **New installation** (editable “Install to:” path with Browse) or an update. An update is detected from the existing Add/Remove Programs entry (version and install location, with the program still in that folder) and shows “Updating existing installation: PrimeCrew Tweakinator 5000 v<old> → v<new>” with a read-only “Installed in:” path. The same banner and path appear on a new Ready to Install page.
+- An update always installs into the existing folder and is never moved (a silent `/D=` is ignored on an update).
+- The last page repeats what happened: “Installed v<new> to <path>” or “Updated to v<new> in <path>”.
+- PrimeCrew Software branding is unchanged: Start menu folder, Publisher, removing old shortcuts on upgrade, and removing the brand folder only if it is empty.
+- The app itself is unchanged apart from the version number.
+
 ## 1.5.1
 
 - Clean temp files now covers both usual places by default, in Beginner and Expert mode: your own temp folder (`%TMP%` / `%TEMP%`, normally `AppData\Local\Temp`) and `C:\Windows\Temp`. Other user accounts' temp folders stay Expert-only, and Expert mode can leave out `C:\Windows\Temp`.
