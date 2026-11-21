@@ -2,13 +2,14 @@
 ; Identity values come from scripts/build-release.sh (-D...).
 ;
 ; - 64-bit only, requires administrator rights
-; - Installs to C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\
+; - Fresh installs go to C:\Program Files\PrimeCrew Tweakinator 5000\ (1.2.0–1.5.2 used
+;   C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\; existing installs stay where they are)
 ; - Start Menu shortcut in the "PrimeCrew Software" folder (all users)
 ; - Listed in Add/Remove Programs (HKLM Uninstall\APP_ID)
 ; - Uninstall does NOT revert tweaks and does NOT delete C:\ProgramData\Win10Tweaks
 ; - On upgrade, previous shortcuts are removed first so they do not duplicate
 ; - On uninstall, the Start menu folder is removed only if empty; the parent
-;   Program Files\PrimeCrew Software folder is left in place if other apps are there
+;   Program Files\PrimeCrew Software folder (old layout only) is removed only if it is empty
 ; - Shared PrimeCrew look: the first page and the Ready to Install page say either
 ;   "New installation" (editable "Install to:" path + Browse) or
 ;   "Updating existing installation: <app> v<old> → v<new>" with a read-only "Installed in:" path.
@@ -32,7 +33,7 @@ Target amd64-unicode
 
 Name "${APP_NAME}"
 OutFile "${OUTFILE}"
-InstallDir "$PROGRAMFILES64\${PUBLISHER}\${APP_NAME}"
+InstallDir "$PROGRAMFILES64\${APP_NAME}"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 BrandingText "${PUBLISHER}"
@@ -145,7 +146,7 @@ Function .onInit
     StrCpy $WantDesktop 1
   ${EndIf}
   ${If} $INSTDIR == ""
-    StrCpy $INSTDIR "$PROGRAMFILES64\${PUBLISHER}\${APP_NAME}"
+    StrCpy $INSTDIR "$PROGRAMFILES64\${APP_NAME}"
   ${EndIf}
   Call DetectExistingInstall
   Call SetTexts
@@ -285,7 +286,7 @@ Function LocationLeave
   StrCpy $1 $0 2 1
   ${If} $0 == ""
   ${OrIf} $1 != ":\"
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Please choose a full folder path, for example $PROGRAMFILES64\${PUBLISHER}\${APP_NAME}."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Please choose a full folder path, for example $PROGRAMFILES64\${APP_NAME}."
     Abort
   ${EndIf}
   StrCpy $INSTDIR $0
@@ -343,9 +344,12 @@ Section "un.${APP_NAME}" UnSecApp
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
-  ; Remove the parent Program Files\PrimeCrew Software folder only if it is empty
-  ; (other PrimeCrew Software apps may be installed there).
-  RMDir "$PROGRAMFILES64\${PUBLISHER}"
+  ; Old layout (1.2.0–1.5.2): also remove the parent Program Files\PrimeCrew Software folder,
+  ; but only if this install lived in it and it is now empty (other PrimeCrew Software apps may be there).
+  ${GetParent} "$INSTDIR" $0
+  ${If} $0 == "$PROGRAMFILES64\${PUBLISHER}"
+    RMDir "$0"
+  ${EndIf}
   DeleteRegKey HKLM "${UNINST_KEY}"
 SectionEnd
 

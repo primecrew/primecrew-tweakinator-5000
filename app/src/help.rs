@@ -698,8 +698,8 @@ Before you uninstall
 • If a Temporary allow timer is still running, click Restore update kill first. The timer’s SYSTEM task runs the installed exe; uninstalling without restoring can leave that task pointing at a missing file.
 
 How to uninstall
-• Use Add/Remove Programs, or uninstall.exe in the install folder (C:\\Program Files\\PrimeCrew Software\\PrimeCrew Tweakinator 5000\\).
-• That removes the app, its Start menu shortcut, and the Add/Remove Programs entry. The PrimeCrew Software Start menu folder is removed only if it is empty. The parent Program Files\\PrimeCrew Software folder is left in place if other PrimeCrew Software apps are installed there.
+• Use Add/Remove Programs, or uninstall.exe in the install folder (C:\\Program Files\\PrimeCrew Tweakinator 5000\\ for new installs; installs from 1.5.2 or earlier stay in C:\\Program Files\\PrimeCrew Software\\PrimeCrew Tweakinator 5000\\).
+• That removes the app, its Start menu shortcut, and the Add/Remove Programs entry. The PrimeCrew Software Start menu folder is removed only if it is empty. For an older install in Program Files\\PrimeCrew Software, that parent folder is removed only if it is empty.
 
 The portable zip has no uninstaller: delete the folder you unzipped. The same rule applies — deleting the exe does not revert tweaks. If a portable temporary-allow timer is still running, click Restore update kill first.
 ";

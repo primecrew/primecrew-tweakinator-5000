@@ -2,6 +2,16 @@
 
 User-facing history for PrimeCrew Tweakinator 5000.
 
+## 1.5.3
+
+- Branding alignment with the other PrimeCrew Software apps. The app name stays PrimeCrew Tweakinator 5000.
+- New installations go to `C:\Program Files\PrimeCrew Tweakinator 5000\` by default (no PrimeCrew Software parent folder). Existing installations are found through their Add/Remove Programs entry and updated where they are, never moved; the “Updating existing installation” banner and read-only “Installed in:” path work for both layouts. The Start menu entry stays in the PrimeCrew Software folder and the Publisher stays PrimeCrew Software.
+- Uninstall removes only the app's own folder, plus an empty `Program Files\PrimeCrew Software` parent folder only for an installation in the old layout.
+- The Temporary allow restore timer finds the installed exe in either layout (the install location recorded by the installer, when it is under Program Files). A portable run still uses the staged copy.
+- Download names: `PrimeCrewTweakinator5000-v1.5.3-setup.exe` and `PrimeCrewTweakinator5000-v1.5.3-win64.zip`.
+- Copyright: LICENSE starts with “Copyright (C) 2026 PrimeCrew Software”, which is also the exe's LegalCopyright. Cargo authors = PrimeCrew Software.
+- Unchanged on purpose: `C:\ProgramData\Win10Tweaks`, and the `Win10Tweaks-*` task and firewall rule names.
+
 ## 1.5.2
 
 - Installer: the first page now says clearly whether this is a **New installation** (editable “Install to:” path with Browse) or an update. An update is detected from the existing Add/Remove Programs entry (version and install location, with the program still in that folder) and shows “Updating existing installation: PrimeCrew Tweakinator 5000 v<old> → v<new>” with a read-only “Installed in:” path. The same banner and path appear on a new Ready to Install page.

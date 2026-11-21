@@ -585,12 +585,27 @@ fn paths_equal(a: &Path, b: &Path) -> bool {
     norm_win_path(a) == norm_win_path(b)
 }
 
-/// Official install location (`C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\...`).
-fn installed_exe() -> PathBuf {
-    PathBuf::from(std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into()))
-        .join("PrimeCrew Software")
-        .join("PrimeCrew Tweakinator 5000")
-        .join("PrimeCrewTweakinator5000.exe")
+/// Installed copies the SYSTEM restore task may run directly (Program Files is admin-only write):
+/// the InstallLocation recorded by the installer when it is under Program Files (an update is never moved,
+/// so this covers both layouts),
+/// the current default `C:\Program Files\PrimeCrew Tweakinator 5000\`, and the 1.2.0–1.5.2 default
+/// `C:\Program Files\PrimeCrew Software\PrimeCrew Tweakinator 5000\`.
+fn installed_exe_candidates() -> Vec<PathBuf> {
+    const EXE: &str = "PrimeCrewTweakinator5000.exe";
+    let pf = PathBuf::from(std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into()));
+    let mut v = vec![];
+    if let Some(loc) = sys::reg_get(r"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PrimeCrewTweakinator5000", "InstallLocation").as_text() {
+        let loc = loc.trim().trim_matches('"').trim_end_matches('\\').to_string();
+        // Only trust it under Program Files (admin-only write). A custom folder elsewhere may be
+        // user-writable, so a SYSTEM task must not run it; that case uses the staging copy instead.
+        let pf_key = format!("{}\\", norm_win_path(&pf));
+        if !loc.is_empty() && norm_win_path(Path::new(&loc)).starts_with(&pf_key) {
+            v.push(PathBuf::from(loc).join(EXE));
+        }
+    }
+    v.push(pf.join("PrimeCrew Tweakinator 5000").join(EXE));
+    v.push(pf.join("PrimeCrew Software").join("PrimeCrew Tweakinator 5000").join(EXE));
+    v
 }
 
 /// Staging path used by earlier builds, and by a portable run of this build.
@@ -601,19 +616,17 @@ fn legacy_restore_task_exe() -> PathBuf {
         .join("win10_tweaks.exe")
 }
 
-fn running_from_install() -> bool {
-    std::env::current_exe().ok().is_some_and(|p| paths_equal(&p, &installed_exe()))
+/// The installed exe this process is running from, if any (either install layout).
+fn running_installed_exe() -> Option<PathBuf> {
+    let me = std::env::current_exe().ok()?;
+    installed_exe_candidates().into_iter().find(|c| paths_equal(&me, c) && c.exists())
 }
 
 /// Exe the SYSTEM restore task should run.
-/// Installed copy: point at the installed exe (Program Files is admin-only write).
+/// Installed copy: point at the installed exe (Program Files is admin-only write), whichever layout it is in.
 /// Portable / other: copy to the legacy staging path so older timers and this flow stay compatible.
 fn restore_task_exe() -> PathBuf {
-    if running_from_install() {
-        installed_exe()
-    } else {
-        legacy_restore_task_exe()
-    }
+    running_installed_exe().unwrap_or_else(legacy_restore_task_exe)
 }
 
 /// One-shot SYSTEM task that runs the restore exe with --restore-wu-kill at `at`.

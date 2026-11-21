@@ -45,7 +45,7 @@ mkdir -p "$OUT_DIR"
 cp "$BIN" "$OUT_DIR/$EXE"
 
 # ---- portable zip (folder + exe + README)
-ZIP_NAME="$FILE_STEM-v$VERSION.zip"
+ZIP_NAME="$FILE_STEM-v$VERSION-win64.zip"
 ZIP="$OUT_DIR/$ZIP_NAME"
 rm -f "$ZIP"
 python3 - "$ZIP" "$BIN" "$EXE" "$FILE_STEM" <<'PY'
@@ -57,7 +57,7 @@ with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as f:
 PY
 
 # ---- installer
-SETUP_NAME="$FILE_STEM-v$VERSION-x64-Setup.exe"
+SETUP_NAME="$FILE_STEM-v$VERSION-setup.exe"
 SETUP="$OUT_DIR/$SETUP_NAME"
 makensis -V2 -INPUTCHARSET UTF8 \
   -DAPP_NAME="$APP_NAME" \

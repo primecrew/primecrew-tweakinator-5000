@@ -29,7 +29,7 @@ fn main() {
     res.set("FileVersion", &ver4);
     res.set("ProductVersion", &ver4);
     res.set("CompanyName", "PrimeCrew Software");
-    res.set("LegalCopyright", "PrimeCrew Software");
+    res.set("LegalCopyright", "Copyright (C) 2026 PrimeCrew Software");
     res.compile().expect("winres: failed to compile Windows resources (manifest + icon)");
     // GNU/LLVM linkers drop unreferenced archive members, which silently loses the manifest.
     // Link the compiled resource object directly so the requireAdministrator manifest is always embedded.
