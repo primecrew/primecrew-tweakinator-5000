@@ -1,6 +1,6 @@
 [package]
 name = "win10_tweaks"
-version = "1.5.4"
+version = "1.5.5"
 authors = ["PrimeCrew Software"]
 edition = "2021"
 description = "PrimeCrew Tweakinator 5000 - portable Windows 10 tweak toolkit (updates, Win11 block, Copilot, Spotlight, God Mode, WU cache cleanup, guided OneDrive removal, temp file cleanup)"

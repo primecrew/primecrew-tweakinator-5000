@@ -2,6 +2,11 @@
 
 User-facing history for PrimeCrew Tweakinator 5000.
 
+## 1.5.5
+
+- About now says “Free software. Use at your own risk — read Help ▸ Known limits. Licensed under GPL v3 or later.” The old “Free for personal use” wording did not match the GPL, which allows any use. The README description of About matches.
+- No other changes.
+
 ## 1.5.4
 
 - Relicensed from MIT to the GNU General Public License v3 or later (GPL-3.0-or-later). Releases v1.5.4 and later are GPL-3.0-or-later; earlier releases stay under MIT.
