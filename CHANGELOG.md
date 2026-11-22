@@ -2,6 +2,14 @@
 
 User-facing history for PrimeCrew Tweakinator 5000.
 
+## 1.5.4
+
+- Relicensed from MIT to the GNU General Public License v3 or later (GPL-3.0-or-later). Releases v1.5.4 and later are GPL-3.0-or-later; earlier releases stay under MIT.
+- LICENSE is now the unmodified GPL v3 text. A new COPYRIGHT file holds the copyright line and license notice.
+- LICENSE and COPYRIGHT are installed next to the exe and included in the portable zip (and removed by the uninstaller).
+- About now says “Licensed under GPL v3 or later.” Cargo license = GPL-3.0-or-later. README has a License section.
+- No functional changes to the app or installer behavior.
+
 ## 1.5.3
 
 - Branding alignment with the other PrimeCrew Software apps. The app name stays PrimeCrew Tweakinator 5000.

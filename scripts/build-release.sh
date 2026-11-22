@@ -44,7 +44,7 @@ BIN="app/target/$TARGET/release/$EXE"
 mkdir -p "$OUT_DIR"
 cp "$BIN" "$OUT_DIR/$EXE"
 
-# ---- portable zip (folder + exe + README)
+# ---- portable zip (folder + exe + README + LICENSE + COPYRIGHT)
 ZIP_NAME="$FILE_STEM-v$VERSION-win64.zip"
 ZIP="$OUT_DIR/$ZIP_NAME"
 rm -f "$ZIP"
@@ -54,6 +54,8 @@ z, exe, name, folder = sys.argv[1:5]
 with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as f:
     f.write(exe, f"{folder}/{name}")
     f.write("README.md", f"{folder}/README.md")
+    f.write("LICENSE", f"{folder}/LICENSE")
+    f.write("COPYRIGHT", f"{folder}/COPYRIGHT")
 PY
 
 # ---- installer

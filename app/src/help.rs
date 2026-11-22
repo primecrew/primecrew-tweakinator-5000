@@ -266,7 +266,7 @@ pub fn show_about(ctx: &egui::Context, icon: &egui::TextureHandle, open: &mut bo
                 ui.add_space(8.0);
                 ui.add(egui::Label::new("A conservative Windows 10 tweak toolkit: nothing is applied silently, and every change can be verified or reverted.").wrap());
                 ui.add_space(6.0);
-                ui.add(egui::Label::new(RichText::new("Free for personal use. Use at your own risk — read Help ▸ Known limits. Licensed under MIT.").small().color(k.muted)).wrap());
+                ui.add(egui::Label::new(RichText::new("Free for personal use. Use at your own risk — read Help ▸ Known limits. Licensed under GPL v3 or later.").small().color(k.muted)).wrap());
                 ui.add_space(12.0);
                 if ui.add(theme::primary_button("Close")).clicked() {
                     close = true;

@@ -97,6 +97,8 @@ Section "${APP_NAME} (required)" SecApp
   SetOutPath "$INSTDIR"
   File "/oname=${APP_EXE}" "${EXE_PATH}"
   File "/oname=README.md" "${SRC_DIR}\README.md"
+  File "/oname=LICENSE" "${SRC_DIR}\LICENSE"
+  File "/oname=COPYRIGHT" "${SRC_DIR}\COPYRIGHT"
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   ; Upgrade: drop previous shortcuts (Start menu, ungrouped leftover, desktop) so they do not duplicate.
@@ -325,7 +327,7 @@ Function ReadyPage
 FunctionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "The program, README, and uninstaller. Tweaks you have already applied are not changed."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "The program, README, license files, and uninstaller. Tweaks you have already applied are not changed."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecStart} "A shortcut in the ${PUBLISHER} Start menu folder."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A shortcut on the desktop."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
@@ -342,6 +344,8 @@ Section "un.${APP_NAME}" UnSecApp
   RMDir "${SM_FOLDER}"
   Delete "$INSTDIR\${APP_EXE}"
   Delete "$INSTDIR\README.md"
+  Delete "$INSTDIR\LICENSE"
+  Delete "$INSTDIR\COPYRIGHT"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
   ; Old layout (1.2.0–1.5.2): also remove the parent Program Files\PrimeCrew Software folder,

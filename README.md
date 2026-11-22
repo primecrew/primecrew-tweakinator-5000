@@ -6,12 +6,12 @@ PrimeCrew Tweakinator 5000 is a small Windows 10 utility from **PrimeCrew Softwa
 
 ## Download
 
-Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.5.3**.
+Get the latest files from the **[Releases page](https://github.com/primecrew/primecrew-tweakinator-5000/releases/latest)** (no GitHub account needed). The current release is **v1.5.4**.
 
-- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.5.3-setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.3/PrimeCrewTweakinator5000-v1.5.3-setup.exe)  
+- **Installer version (recommended)** — [PrimeCrewTweakinator5000-v1.5.4-setup.exe](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.4/PrimeCrewTweakinator5000-v1.5.4-setup.exe)  
   A normal setup. It adds a Start menu entry under PrimeCrew Software and appears in Add/Remove Programs.
 
-- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.5.3-win64.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.3/PrimeCrewTweakinator5000-v1.5.3-win64.zip)**  
+- **Portable version (no install) — [PrimeCrewTweakinator5000-v1.5.4-win64.zip](https://github.com/primecrew/primecrew-tweakinator-5000/releases/download/v1.5.4/PrimeCrewTweakinator5000-v1.5.4-win64.zip)**  
   Unzip anywhere, run `PrimeCrewTweakinator5000.exe`. Nothing gets installed, and you can run it from a USB stick.
 
 **Requirements:** Windows 10 64-bit (aimed at Pro 22H2). The app asks for administrator permission (a UAC prompt) when you run it. The GUI needs a GPU/driver with OpenGL 2+ (normal on real hardware; may fail in a bare VM or some RDP sessions). No extra runtime. The app contains no network code and sends no telemetry.
@@ -131,7 +131,7 @@ The Help window is resizable, with a topic list on the left and readable text on
 
 Circled question marks (a “?” inside a circle, not a “(?)” label) sit next to settings, actions and wizard steps. Hover for a short explanation; click to open that Help topic. They are shown in Beginner mode and, more quietly, in Expert mode.
 
-The About popup (Help menu only) shows the app icon, the name, the version from the package metadata, “by PrimeCrew Software”, a one-line description, and “Free for personal use. Use at your own risk — read Help ▸ Known limits,” plus an MIT license note. The repository includes an MIT LICENSE file (copyright PrimeCrew Software). About is no longer listed under Options.
+The About popup (Help menu only) shows the app icon, the name, the version from the package metadata, “by PrimeCrew Software”, a one-line description, and “Free for personal use. Use at your own risk — read Help ▸ Known limits,” plus “Licensed under GPL v3 or later.” See [License](#license). About is no longer listed under Options.
 
 ### Pre-flight check, Apply summary, and friendlier logs
 
@@ -252,14 +252,20 @@ Output: `app/target/x86_64-pc-windows-gnullvm/release/PrimeCrewTweakinator5000.e
 Release artifacts:
 
 ```
-PrimeCrewTweakinator5000-v1.5.3-setup.exe
-PrimeCrewTweakinator5000-v1.5.3-win64.zip
-PrimeCrewTweakinator5000-v1.5.3-SHA256SUMS.txt
+PrimeCrewTweakinator5000-v1.5.4-setup.exe
+PrimeCrewTweakinator5000-v1.5.4-win64.zip
+PrimeCrewTweakinator5000-v1.5.4-SHA256SUMS.txt
   PrimeCrewTweakinator5000/PrimeCrewTweakinator5000.exe
   PrimeCrewTweakinator5000/README.md
 ```
 
 Every build must carry the version in the window title / About, in the exe version info (`FileVersion` / `ProductVersion`), in the installer filename, and in the zip filename.
+
+## License
+
+Copyright (C) 2026 PrimeCrew Software
+
+PrimeCrew Tweakinator 5000 is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version (GPL-3.0-or-later). See [LICENSE](LICENSE) and [COPYRIGHT](COPYRIGHT). Releases v1.5.4 and later are GPL-3.0-or-later; earlier releases (v1.5.3 and before) remain under the MIT License. The installer and the portable zip include both files.
 
 ## Sources (fetched November 2026)
 
